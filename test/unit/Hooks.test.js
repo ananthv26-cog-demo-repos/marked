@@ -1,5 +1,5 @@
 import { Marked } from '../../lib/marked.esm.js';
-import { timeout } from './utils.js';
+import { timeout } from './utils.ts';
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 

@@ -1,5 +1,5 @@
 import { Marked, Renderer, lexer, parseInline, getDefaults, walkTokens, defaults, setOptions } from '../../lib/marked.esm.js';
-import { timeout } from './utils.js';
+import { timeout } from './utils.ts';
 import assert from 'node:assert';
 import { describe, it, beforeEach, mock } from 'node:test';
 
