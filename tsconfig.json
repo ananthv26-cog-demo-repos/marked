@@ -9,9 +9,11 @@
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "NodeNext",
     "allowImportingTsExtensions": true,
-    "sourceMap": false
+    "sourceMap": false,
+    "types": ["node"]
   },
   "include": [
-    "src/*.ts"
+    "src/*.ts",
+    "bin/*.ts"
   ]
 }

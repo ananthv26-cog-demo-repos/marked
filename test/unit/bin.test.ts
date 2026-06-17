@@ -1,4 +1,4 @@
-import { main } from '../../bin/main.js';
+import { main } from '../../bin/main.ts';
 import { htmlIsEqual } from '@markedjs/testutils';
 import { resolve } from 'node:path';
 import { describe, it, mock } from 'node:test';
@@ -69,7 +69,7 @@ function fixturePath(filePath) {
 }
 
 function execMarked({ args = '', stdin = '', stdout = '', stderr = '' }) {
-  const execPath = resolve(import.meta.dirname, '../../bin/marked');
+  const execPath = resolve(import.meta.dirname, '../../lib/marked.cli.js');
   return async() => {
     let command = '';
 

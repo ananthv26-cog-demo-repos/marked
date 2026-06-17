@@ -48,3 +48,15 @@ await esbuild.build(config({
   format: 'umd',
   outfile: 'lib/marked.umd.js',
 }));
+
+await esbuild.build({
+  entryPoints: ['bin/marked.ts'],
+  outfile: 'lib/marked.cli.js',
+  banner: {
+    js: '#!/usr/bin/env node',
+  },
+  platform: 'node',
+  format: 'esm',
+  target: 'node20',
+  bundle: true,
+});
