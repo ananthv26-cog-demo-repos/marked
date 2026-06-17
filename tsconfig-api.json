@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "resolveJsonModule": true,
+    "paths": {
+      "marked": [
+        "./lib/marked.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "api/*.ts"
+  ]
+}

@@ -1,10 +1,20 @@
-import { marked } from '../lib/marked.esm.js';
+import { marked } from 'marked';
 import pkg from '../package.json' with { type: 'json' };
 
 const version = pkg.version;
 const name = 'Marked';
 
-export default function dingus(req, res) {
+interface DingusRequest {
+  method?: string;
+  query: Record<string, string | undefined>;
+}
+
+interface DingusResponse {
+  status: (statusCode: number) => DingusResponse;
+  json: (body: unknown) => void;
+}
+
+export default function dingus(req: DingusRequest, res: DingusResponse): void {
   if (req.method !== 'GET') {
     return res.status(405).json({
       error: {
