@@ -1,18 +1,31 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { htmlIsEqual, getTests } from '@markedjs/testutils';
+import type { Spec } from '@markedjs/testutils';
+import type { MarkedOptions } from 'marked';
 
 import { marked } from '../lib/marked.esm.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+type ParseFunction = (markdown: string) => string | Promise<string>;
+
+interface BenchOptions {
+  marked?: MarkedOptions;
+}
+
+interface BenchStat {
+  elapsed: bigint;
+  correct: number;
+}
+
 /**
  * Load specs
  */
-export async function load() {
+export async function load(): Promise<Spec[]> {
   const dir = resolve(__dirname, './specs/commonmark');
   const sections = await getTests(dir);
-  let specs = [];
+  let specs: Spec[] = [];
 
   for (const section in sections) {
     specs = specs.concat(sections[section].specs);
@@ -24,10 +37,10 @@ export async function load() {
 /**
  * Run all benchmarks
  */
-export async function runBench(options) {
+export async function runBench(options?: BenchOptions): Promise<void> {
   options = options || {};
   const specs = await load();
-  const tests = {};
+  const tests: Record<string, ParseFunction> = {};
 
   marked.setOptions({
     gfm: false,
@@ -44,12 +57,12 @@ export async function runBench(options) {
       const { Parser, HtmlRenderer } = await import('commonmark');
       const parser = new Parser();
       const writer = new HtmlRenderer();
-      return function(text) {
+      return function(text: string): string {
         return writer.render(parser.parse(text));
       };
     })();
   } catch(e) {
-    console.error('Could not bench commonmark. (Error: %s)', e.message);
+    console.error('Could not bench commonmark. (Error: %s)', (e as Error).message);
   }
 
   try {
@@ -59,14 +72,14 @@ export async function runBench(options) {
       return md.render.bind(md);
     })();
   } catch(e) {
-    console.error('Could not bench markdown-it. (Error: %s)', e.message);
+    console.error('Could not bench markdown-it. (Error: %s)', (e as Error).message);
   }
 
   await bench(tests, specs);
 }
 
-export async function bench(tests, specs) {
-  const stats = {};
+export async function bench(tests: Record<string, ParseFunction>, specs: Spec[]): Promise<void> {
+  const stats: Record<string, BenchStat> = {};
   for (const name in tests) {
     stats[name] = {
       elapsed: 0n,
@@ -116,23 +129,23 @@ export async function bench(tests, specs) {
 /**
  * Argument Parsing
  */
-function parseArg(argv) {
+function parseArg(argv: string[]): BenchOptions {
   argv = argv.slice(2);
 
-  const options = {};
-  const orphans = [];
+  const options: BenchOptions = {};
+  const orphans: string[] = [];
 
-  function getArg() {
-    let arg = argv.shift();
+  function getArg(): string {
+    let arg = argv.shift()!;
 
     if (arg.indexOf('--') === 0) {
       // e.g. --opt
-      arg = arg.split('=');
-      if (arg.length > 1) {
+      const parts = arg.split('=');
+      if (parts.length > 1) {
         // e.g. --opt=val
-        argv.unshift(arg.slice(1).join('='));
+        argv.unshift(parts.slice(1).join('='));
       }
-      arg = arg[0];
+      arg = parts[0];
     } else if (arg[0] === '-') {
       if (arg.length > 2) {
         // e.g. -abc
@@ -141,7 +154,7 @@ function parseArg(argv) {
           .split('')
           .map((ch) => `-${ch}`)
           .concat(argv);
-        arg = argv.shift();
+        arg = argv.shift()!;
       } else {
         // e.g. -a
       }
@@ -152,21 +165,21 @@ function parseArg(argv) {
     return arg;
   }
 
-  const defaults = marked.getDefaults();
+  const defaults = marked.getDefaults() as MarkedOptions;
 
   while (argv.length) {
     const arg = getArg();
     if (arg.indexOf('--') === 0) {
-      const opt = camelize(arg.replace(/^--(no-)?/, ''));
+      const opt = camelize(arg.replace(/^--(no-)?/, '')) as keyof MarkedOptions;
       if (!(opt in defaults)) {
         continue;
       }
       options.marked = options.marked || {};
+      const target = options.marked as Record<string, unknown>;
       if (arg.indexOf('--no-') === 0) {
-        options.marked[opt] = typeof defaults[opt] !== 'boolean' ? null : false;
+        target[opt] = typeof defaults[opt] !== 'boolean' ? null : false;
       } else {
-        options.marked[opt] =
-          typeof defaults[opt] !== 'boolean' ? argv.shift() : true;
+        target[opt] = typeof defaults[opt] !== 'boolean' ? argv.shift() : true;
       }
     } else {
       orphans.push(arg);
@@ -186,14 +199,14 @@ function parseArg(argv) {
 /**
  * Helpers
  */
-function camelize(text) {
-  return text.replace(/(\w)-(\w)/g, (_, a, b) => a + b.toUpperCase());
+function camelize(text: string): string {
+  return text.replace(/(\w)-(\w)/g, (_, a: string, b: string) => a + b.toUpperCase());
 }
 
 /**
  * Main
  */
-export default async function main(argv) {
+export default async function main(argv: string[]): Promise<void> {
   const opt = parseArg(argv);
 
   await runBench(opt);
@@ -203,7 +216,7 @@ export default async function main(argv) {
  * returns time to millisecond granularity
  * @param hrtimeElapsed {bigint}
  */
-function prettyElapsedTime(hrtimeElapsed) {
+function prettyElapsedTime(hrtimeElapsed: bigint): number {
   return Number(hrtimeElapsed / 1_000_000n);
 }
 

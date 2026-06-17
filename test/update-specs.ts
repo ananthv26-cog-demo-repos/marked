@@ -3,24 +3,34 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load } from 'cheerio';
 import { htmlIsEqual } from '@markedjs/testutils';
+import type { Spec } from '@markedjs/testutils';
+import type { MarkedExtension } from 'marked';
 import { Marked } from '../lib/marked.esm.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function removeFiles(dir) {
+interface GfmSpec {
+  section: string;
+  html: string;
+  markdown: string;
+  example: number;
+  shouldFail?: boolean;
+}
+
+function removeFiles(dir: string): void {
   readdirSync(dir).forEach(file => {
     unlinkSync(join(dir, file));
   });
 }
 
-async function updateCommonmark(dir, options) {
+async function updateCommonmark(dir: string, options: MarkedExtension): Promise<void> {
   try {
     const res = await fetch('https://raw.githubusercontent.com/commonmark/commonmark.js/master/package.json');
     const pkg = await res.json();
     const { version } = pkg;
     const res2 = await fetch(`https://spec.commonmark.org/${version}/spec.json`);
     const json = await res2.json();
-    const specs = await Promise.all(json.map(async(spec) => {
+    const specs = await Promise.all(json.map(async(spec: Spec) => {
       const marked = new Marked();
       const html = marked.parse(spec.markdown, options);
       const isEqual = await htmlIsEqual(html, spec.html);
@@ -36,7 +46,7 @@ async function updateCommonmark(dir, options) {
   }
 }
 
-async function updateGfm(dir) {
+async function updateGfm(dir: string): Promise<void> {
   try {
     const res = await fetch('https://github.github.com/gfm/');
     const html = await res.text();
@@ -45,7 +55,7 @@ async function updateGfm(dir) {
     if (!version) {
       throw new Error('No version found');
     }
-    let specs = [];
+    let specs: GfmSpec[] = [];
     $('.extension').each((i, ext) => {
       const section = $('.definition', ext).text().trim().replace(/^\d+\.\d+(.*?) \(extension\)[\s\S]*$/, '$1');
       $('.example', ext).each((j, exa) => {

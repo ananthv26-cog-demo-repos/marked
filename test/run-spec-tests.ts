@@ -1,9 +1,10 @@
 import { Marked } from '../lib/marked.esm.js';
 import { getTests, runTests, outputCompletionTable } from '@markedjs/testutils';
+import type { MarkedExtension } from 'marked';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-function parse(markdown, options) {
+function parse(markdown: string, options?: MarkedExtension): string | Promise<string> {
   const marked = new Marked(options);
   return marked.parse(markdown);
 }
