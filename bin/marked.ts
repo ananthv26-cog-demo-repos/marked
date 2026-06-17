@@ -1,12 +1,10 @@
-#!/usr/bin/env node
-
 /**
  * Marked CLI
  * Copyright (c) 2018+, MarkedJS. (MIT License)
  * Copyright (c) 2011-2018, Christopher Jeffrey. (MIT License)
  */
 
-import { main } from './main.js';
+import { main } from './main.ts';
 
 /**
  * Expose / Entry Point

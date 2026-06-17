@@ -9,11 +9,10 @@
   "browser": "./lib/marked.umd.js",
   "types": "./lib/marked.d.ts",
   "bin": {
-    "marked": "bin/marked.js"
+    "marked": "lib/marked.cli.js"
   },
   "man": "./man/marked.1",
   "files": [
-    "bin/",
     "lib/",
     "man/"
   ],
@@ -22,7 +21,7 @@
       "types": "./lib/marked.d.ts",
       "default": "./lib/marked.esm.js"
     },
-    "./bin/marked": "./bin/marked.js",
+    "./bin/marked": "./lib/marked.cli.js",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -56,6 +55,7 @@
     "@semantic-release/github": "^12.0.8",
     "@semantic-release/npm": "^13.1.5",
     "@semantic-release/release-notes-generator": "^14.1.1",
+    "@types/node": "^22.19.21",
     "cheerio": "1.2.0",
     "commonmark": "0.31.2",
     "cross-env": "^10.1.0",
@@ -94,8 +94,8 @@
     "test:specs": "node --test --test-reporter=spec test/run-spec-tests.js",
     "test:types": "tsc --project tsconfig-type-test.json && attw -P --entrypoints . --profile esm-only",
     "test:umd": "node test/umd-test.js",
-    "test:unit:only": "node --import tsx --test --test-only --test-reporter=spec test/unit/*.test.js",
-    "test:unit": "node --import tsx --test --test-reporter=spec test/unit/*.test.js",
+    "test:unit:only": "node --import tsx --test --test-only --test-reporter=spec test/unit/*.test.{js,ts}",
+    "test:unit": "node --import tsx --test --test-reporter=spec test/unit/*.test.{js,ts}",
     "test:update": "node test/update-specs.js"
   },
   "engines": {
