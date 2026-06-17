@@ -1,39 +1,68 @@
-const versionCache = {};
-let currentVersion;
+interface MarkedLike {
+  getDefaults?: () => Record<string, unknown>;
+  defaults?: Record<string, unknown>;
+  lexer: (src: string, options?: unknown) => unknown;
+  parser: (tokens: unknown, options?: unknown) => string;
+}
+
+interface MarkedModule {
+  marked?: MarkedLike;
+  default?: MarkedLike;
+  lexer?: MarkedLike['lexer'];
+  parser?: MarkedLike['parser'];
+}
+
+interface MarkedGlobal {
+  module?: { exports?: MarkedLike };
+  marked?: MarkedLike;
+}
+
+interface WorkerRequest {
+  id: string;
+  task: 'defaults' | 'parse';
+  version: string;
+  markdown: string;
+  options: Record<string, unknown>;
+}
+
+const versionCache: Record<string, MarkedLike> = {};
+let currentVersion: string;
 
 onunhandledrejection = (e) => {
   throw e.reason;
 };
 
-onmessage = function(e) {
-  if (e.data.version === currentVersion) {
-    parse(e);
+onmessage = function(e: MessageEvent) {
+  const data = e.data as WorkerRequest;
+  if (data.version === currentVersion) {
+    parse(data);
   } else {
-    loadVersion(e.data.version).then(() => {
-      parse(e);
+    loadVersion(data.version).then(() => {
+      parse(data);
     });
   }
 };
 
-function getDefaults() {
+function getDefaults(): Record<string, unknown> {
   const marked = versionCache[currentVersion];
-  let defaults = {};
+  let defaults: Record<string, unknown> = {};
+  const markedDefaults = marked.defaults;
   if (typeof marked.getDefaults === 'function') {
     defaults = marked.getDefaults();
     delete defaults.renderer;
-  } else if ('defaults' in marked) {
-    for (const prop in marked.defaults) {
+  } else if (markedDefaults) {
+    for (const prop in markedDefaults) {
       if (prop !== 'renderer') {
-        defaults[prop] = marked.defaults[prop];
+        defaults[prop] = markedDefaults[prop];
       }
     }
   }
   return defaults;
 }
 
-function mergeOptions(options) {
+function mergeOptions(options: Record<string, unknown>): Record<string, unknown> {
   const defaults = getDefaults();
-  const opts = {};
+  const opts: Record<string, unknown> = {};
   const invalidOptions = [
     'renderer',
     'tokenizer',
@@ -50,12 +79,12 @@ function mergeOptions(options) {
   return opts;
 }
 
-function parse(e) {
-  switch (e.data.task) {
+function parse(data: WorkerRequest): void {
+  switch (data.task) {
     case 'defaults': {
       postMessage({
-        id: e.data.id,
-        task: e.data.task,
+        id: data.id,
+        task: data.task,
         defaults: getDefaults(),
       });
       break;
@@ -63,32 +92,31 @@ function parse(e) {
     case 'parse': {
       const marked = versionCache[currentVersion];
       // marked 0.0.1 had tokens array as the second parameter of lexer and no options
-      const options = currentVersion.endsWith('@0.0.1') ? [] : mergeOptions(e.data.options);
+      const options = currentVersion.endsWith('@0.0.1') ? [] : mergeOptions(data.options);
       const startTime = new Date();
-      const lexed = marked.lexer(e.data.markdown, options);
+      const lexed = marked.lexer(data.markdown, options);
       const lexedList = jsonString(lexed);
       const parsed = marked.parser(lexed, options);
       const endTime = new Date();
       postMessage({
-        id: e.data.id,
-        task: e.data.task,
+        id: data.id,
+        task: data.task,
         lexed: lexedList,
         parsed,
-        time: endTime - startTime,
+        time: endTime.getTime() - startTime.getTime(),
       });
       break;
     }
   }
 }
 
-function jsonString(input, level) {
-  level = level || 0;
+function jsonString(input: unknown, level = 0): string {
   if (Array.isArray(input)) {
     if (input.length === 0) {
       return '[]';
     }
-    const items = [];
-    let i;
+    const items: string[] = [];
+    let i: number;
     if (!Array.isArray(input[0]) && typeof input[0] === 'object' && input[0] !== null) {
       for (i = 0; i < input.length; i++) {
         items.push(' '.repeat(2 * level) + jsonString(input[i], level + 1));
@@ -100,9 +128,10 @@ function jsonString(input, level) {
     }
     return '[' + items.join(', ') + ']';
   } else if (typeof input === 'object' && input !== null) {
-    const props = [];
-    for (const prop in input) {
-      props.push(prop + ':' + jsonString(input[prop], level));
+    const props: string[] = [];
+    const record = input as Record<string, unknown>;
+    for (const prop in record) {
+      props.push(prop + ':' + jsonString(record[prop], level));
     }
     return '{' + props.join(', ') + '}';
   } else {
@@ -110,12 +139,12 @@ function jsonString(input, level) {
   }
 }
 
-function fetchMarked(file) {
+function fetchMarked(file: string): () => Promise<MarkedLike | undefined> {
   return () =>
     fetch(file)
       .then((res) => res.text())
       .then((text) => {
-        const g = globalThis || global;
+        const g = globalThis as unknown as MarkedGlobal;
         g.module = { };
         try {
           // eslint-disable-next-line no-new-func
@@ -123,13 +152,13 @@ function fetchMarked(file) {
         } catch {
           throw new Error(`Cannot find ${file}`);
         }
-        const marked = g.marked || g.module.exports;
+        const marked = g.marked || g.module?.exports;
         return marked;
       });
 }
 
-function loadVersion(ver) {
-  let promise;
+function loadVersion(ver: string): Promise<void> {
+  let promise: Promise<void>;
   if (versionCache[ver]) {
     promise = Promise.resolve();
   } else {
@@ -137,7 +166,7 @@ function loadVersion(ver) {
       .catch(fetchMarked(ver + '/marked.min.js'))
       .catch(fetchMarked(ver + '/lib/marked.umd.js'))
       .catch(fetchMarked(ver + '/lib/marked.js'))
-      .then((marked) => {
+      .then((marked: MarkedModule | undefined) => {
         if (!marked) {
           throw Error('No marked');
         } else if (marked.marked) {
@@ -145,7 +174,7 @@ function loadVersion(ver) {
         } else if (marked.default) {
           versionCache[ver] = marked.default;
         } else if (marked.lexer && marked.parser) {
-          versionCache[ver] = marked;
+          versionCache[ver] = marked as MarkedLike;
         } else {
           throw new Error('Cannot find marked');
         }
@@ -153,7 +182,7 @@ function loadVersion(ver) {
   }
   return promise.then(() => {
     currentVersion = ver;
-  }).catch((err) => {
+  }).catch((err: unknown) => {
     console.error(err);
     throw new Error('Cannot load that version of marked');
   });

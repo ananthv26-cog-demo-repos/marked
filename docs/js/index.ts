@@ -1,4 +1,7 @@
 document.addEventListener('DOMContentLoaded', function() {
+  type ThemePreference = 'system' | 'light' | 'dark';
+  type Theme = 'light' | 'dark';
+
   // --- Theme Toggling ---
   const themeToggle = document.getElementById('theme-toggle');
   const themeToggleIcon = themeToggle ? themeToggle.querySelector('[data-theme-icon]') : null;
@@ -6,14 +9,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const THEME_STORAGE_KEY = 'theme-preference';
   const LEGACY_STORAGE_KEY = 'theme';
-  const THEME_ORDER = ['system', 'light', 'dark'];
-  const TOGGLE_UI = {
+  const THEME_ORDER: ThemePreference[] = ['system', 'light', 'dark'];
+  const TOGGLE_UI: Record<ThemePreference, { icon: string; text: string }> = {
     system: { icon: 'brightness_auto', text: 'System' },
     light: { icon: 'light_mode', text: 'Light' },
     dark: { icon: 'dark_mode', text: 'Dark' },
   };
 
-  function applyTheme(theme) {
+  function applyTheme(theme: Theme): void {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
@@ -22,18 +25,18 @@ document.addEventListener('DOMContentLoaded', function() {
     document.documentElement.setAttribute('data-theme', theme);
   }
 
-  function getSystemTheme() {
+  function getSystemTheme(): Theme {
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       return 'dark';
     }
     return 'light';
   }
 
-  function sanitisePreference(value) {
-    return THEME_ORDER.includes(value) ? value : null;
+  function sanitisePreference(value: string | null): ThemePreference | null {
+    return value === 'system' || value === 'light' || value === 'dark' ? value : null;
   }
 
-  function readStoredPreference() {
+  function readStoredPreference(): ThemePreference | null {
     try {
       const stored = sanitisePreference(localStorage.getItem(THEME_STORAGE_KEY));
       if (stored) {
@@ -45,7 +48,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  function writeStoredPreference(preference) {
+  function writeStoredPreference(preference: ThemePreference): void {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, preference);
       if (preference === 'light' || preference === 'dark') {
@@ -58,11 +61,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  function getEffectiveTheme(preference) {
+  function getEffectiveTheme(preference: ThemePreference): Theme {
     return preference === 'system' ? getSystemTheme() : preference;
   }
 
-  function updateToggle(preference) {
+  function updateToggle(preference: ThemePreference): void {
     if (!themeToggle) {
       return;
     }
@@ -79,9 +82,9 @@ document.addEventListener('DOMContentLoaded', function() {
     themeToggle.title = label;
   }
 
-  let currentPreference = readStoredPreference() || 'system';
+  let currentPreference: ThemePreference = readStoredPreference() || 'system';
 
-  function applyPreference(preference, persist) {
+  function applyPreference(preference: ThemePreference, persist: boolean): void {
     currentPreference = preference;
     const effectiveTheme = getEffectiveTheme(preference);
     applyTheme(effectiveTheme);
@@ -105,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const systemMatcher = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   if (systemMatcher) {
-    const handleSystemChange = function() {
+    const handleSystemChange = function(): void {
       if (currentPreference === 'system') {
         applyPreference('system', false);
       }
@@ -121,7 +124,7 @@ document.addEventListener('DOMContentLoaded', function() {
   // --- Copy-to-Clipboard Button ---
   const allPres = document.querySelectorAll('pre');
   allPres.forEach(function(pre) {
-    let timeout = null;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const copyButton = document.createElement('button');
     copyButton.className =
@@ -135,7 +138,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     copyButton.onclick = function() {
       // Exclude the button's own text from being copied
-      const code = pre.querySelector('code').innerText;
+      const codeElem = pre.querySelector<HTMLElement>('code');
+      if (!codeElem) {
+        return;
+      }
+      const code = codeElem.innerText;
       navigator.clipboard.writeText(code);
 
       copyButton.innerHTML = '<span class="material-icons text-sm">done</span>';
@@ -162,23 +169,23 @@ document.addEventListener('DOMContentLoaded', function() {
   const mobileOverlay = document.getElementById('mobile-overlay');
   const body = document.body;
 
-  function openMobileMenu() {
-    sidebar.classList.add('mobile-open');
-    mobileOverlay.classList.add('active');
+  function openMobileMenu(): void {
+    sidebar?.classList.add('mobile-open');
+    mobileOverlay?.classList.add('active');
     body.classList.add('mobile-menu-open');
-    mobileMenuToggle.setAttribute('aria-expanded', 'true');
+    mobileMenuToggle?.setAttribute('aria-expanded', 'true');
   }
 
-  function closeMobileMenu() {
-    sidebar.classList.remove('mobile-open');
-    mobileOverlay.classList.remove('active');
+  function closeMobileMenu(): void {
+    sidebar?.classList.remove('mobile-open');
+    mobileOverlay?.classList.remove('active');
     body.classList.remove('mobile-menu-open');
-    mobileMenuToggle.setAttribute('aria-expanded', 'false');
+    mobileMenuToggle?.setAttribute('aria-expanded', 'false');
   }
 
   if (mobileMenuToggle) {
     mobileMenuToggle.addEventListener('click', function() {
-      const isOpen = sidebar.classList.contains('mobile-open');
+      const isOpen = sidebar?.classList.contains('mobile-open');
       if (isOpen) {
         closeMobileMenu();
       } else {
@@ -212,12 +219,12 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // --- Known Extensions Search ---
-  const searchInput = document.getElementById('extension-search');
+  const searchInput = document.getElementById('extension-search') as HTMLInputElement | null;
   if (searchInput) {
     const noResultsMsg = document.getElementById('no-extensions-msg');
     const clearButton = document.getElementById('extension-search-clear');
     const extensionsHeading = document.getElementById('extensions');
-    let table = null;
+    let table: Element | null = null;
 
     if (extensionsHeading) {
       let sibling = extensionsHeading.nextElementSibling;
@@ -233,11 +240,11 @@ document.addEventListener('DOMContentLoaded', function() {
     if (table) {
       const tableRows = table.querySelectorAll('tbody tr');
 
-      function filterExtensions() {
+      const filterExtensions = function(): void {
         const query = searchInput.value.toLowerCase().trim();
         let hasRows = false;
 
-        clearButton.classList.toggle('hidden', !query);
+        clearButton?.classList.toggle('hidden', !query);
 
         for (const row of tableRows) {
           const cells = row.querySelectorAll('td');
@@ -252,15 +259,15 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         // Toggle table display and "no results" message based on matches
-        table.classList.toggle('hidden', !hasRows);
-        noResultsMsg.classList.toggle('hidden', hasRows);
-      }
+        table?.classList.toggle('hidden', !hasRows);
+        noResultsMsg?.classList.toggle('hidden', hasRows);
+      };
 
       const debouncedFilter = debounce(filterExtensions, 200);
 
       searchInput.addEventListener('input', debouncedFilter);
 
-      clearButton.addEventListener('click', function() {
+      clearButton?.addEventListener('click', function() {
         searchInput.value = '';
         debouncedFilter.cancel();
         filterExtensions();
@@ -270,14 +277,18 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-function debounce(func, wait) {
-  let timeout;
-  const debounced = (...args) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(args), wait);
-  };
-  debounced.cancel = () => {
-    clearTimeout(timeout);
-  };
+function debounce(func: (...args: unknown[]) => void, wait: number): ((...args: unknown[]) => void) & { cancel: () => void } {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const debounced = Object.assign(
+    (...args: unknown[]): void => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(args), wait);
+    },
+    {
+      cancel: (): void => {
+        clearTimeout(timeout);
+      },
+    },
+  );
   return debounced;
 }
