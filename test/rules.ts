@@ -29,49 +29,50 @@ const COLOR = {
   bgWhite: '\x1b[47m',
 };
 
-function propsToString(obj) {
+function propsToString(obj: unknown): unknown {
   if (obj === null) {
     return null;
   }
-  if (obj.constructor.name === 'Object') {
-    if (obj.exec?.name === 'noopTest') {
+  if (typeof obj === 'object' && obj.constructor.name === 'Object') {
+    const rulesObj = obj as Record<string, unknown>;
+    const exec = rulesObj.exec;
+    if (typeof exec === 'function' && exec.name === 'noopTest') {
       return null;
     }
-    for (const prop in obj) {
-      obj[prop] = propsToString(obj[prop]);
+    for (const prop in rulesObj) {
+      rulesObj[prop] = propsToString(rulesObj[prop]);
     }
-    return obj;
+    return rulesObj;
   }
-  return obj.toString();
+  return String(obj);
 }
 
-let rulesObj = {};
+let rulesObj: Record<string, unknown> = {};
 if (process.argv.length > 2) {
   for (let i = 2; i < process.argv.length; i++) {
     const rulePath = process.argv[i].split('.');
     let rulesList = rulesObj;
-    let rule = rules;
+    let rule: unknown = rules;
     while (rulePath.length > 1) {
-      const prop = rulePath.shift();
+      const prop = rulePath.shift()!;
       if (!rulesList[prop]) {
         rulesList[prop] = {};
-        rulesList = rulesList[prop];
+        rulesList = rulesList[prop] as Record<string, unknown>;
       }
       if (rule) {
-        rule = rule[prop];
+        rule = (rule as Record<string, unknown>)[prop];
       }
     }
-    rulesList[rulePath[0]] = rule?.[rulePath[0]] ?? null;
+    rulesList[rulePath[0]] = (rule as Record<string, unknown> | null)?.[rulePath[0]] ?? null;
   }
 } else {
   rulesObj = rules;
 }
 
-rulesObj = propsToString(rulesObj);
-let output = JSON.stringify(rulesObj, null, 2);
+let output = JSON.stringify(propsToString(rulesObj), null, 2);
 output = output.replace(/^(\s*)"(.*)": null,?$/gm, `$1${COLOR.fgGreen}$2${COLOR.reset}: undefined`);
 output = output.replace(/^(\s*)"(.*)": {$/gm, `$1${COLOR.fgGreen}$2${COLOR.reset}: {`);
-output = output.replace(/^(\s*)"(.*)": "(.*)",?$/gm, (...p) => {
+output = output.replace(/^(\s*)"(.*)": "(.*)",?$/gm, (...p: string[]) => {
   return `${p[1]}${COLOR.fgGreen}${p[2]}${COLOR.reset}: ${COLOR.fgRed}${p[3].replace(/\\\\/g, '\\')}${COLOR.reset}`;
 });
 console.log(output, COLOR.reset);
