@@ -1,10 +1,18 @@
-import { Marked, Renderer, lexer, parseInline, getDefaults, walkTokens, defaults, setOptions } from '../../lib/marked.esm.js';
+import { Marked, Renderer, lexer, parseInline, getDefaults, walkTokens, defaults, setOptions } from 'marked';
+import type { MarkedExtension, MarkedOptions, TokenizerAndRendererExtension, Tokens } from 'marked';
 import { timeout } from './utils.ts';
 import assert from 'node:assert';
 import { describe, it, beforeEach, mock } from 'node:test';
 
+type TestExtension = MarkedExtension & { useNewRenderer?: boolean };
+
+// marked tokenizers may return `false` at runtime to fall back to other
+// tokenizers, but the published TokenizerExtensionFunction type only allows
+// `Tokens.Generic | undefined`. This bridges that gap without changing behavior.
+const fallback = false as unknown as undefined;
+
 describe('marked unit', () => {
-  let marked;
+  let marked: Marked;
   beforeEach(() => {
     marked = new Marked();
     setOptions(getDefaults());
@@ -17,28 +25,28 @@ describe('marked unit', () => {
       const tokens = lexer(md);
 
       assert.strictEqual(tokens[0].type, 'paragraph');
-      assert.strictEqual(tokens[2].tokens[0].type, 'paragraph');
-      assert.strictEqual(tokens[4].items[0].tokens[0].type, 'text');
+      assert.strictEqual((tokens[2] as Tokens.Blockquote).tokens[0].type, 'paragraph');
+      assert.strictEqual((tokens[4] as Tokens.List).items[0].tokens[0].type, 'text');
     });
   });
 
   describe('changeDefaults', () => {
     it('should change global defaults', async() => {
-      const { defaults, setOptions } = await import('../../lib/marked.esm.js');
-      assert.ok(!defaults.test);
-      setOptions({ test: true });
-      assert.ok((await import('../../lib/marked.esm.js')).defaults.test);
+      const { defaults, setOptions } = await import('marked');
+      assert.ok(!(defaults as MarkedOptions & { test?: boolean }).test);
+      setOptions({ test: true } as MarkedOptions);
+      assert.ok(((await import('marked')).defaults as MarkedOptions & { test?: boolean }).test);
     });
   });
 
   describe('inlineLexer', () => {
     it('should send html to renderer.html', () => {
       const renderer = new Renderer();
-      mock.method(renderer, 'html');
+      const htmlMock = mock.method(renderer, 'html');
       const md = 'HTML Image: <img alt="MY IMAGE" src="example.png" />';
       marked.parse(md, { renderer });
 
-      assert.strictEqual(renderer.html.mock.calls[0].arguments[0].raw, '<img alt="MY IMAGE" src="example.png" />');
+      assert.strictEqual(htmlMock.mock.calls[0].arguments[0].raw, '<img alt="MY IMAGE" src="example.png" />');
     });
   });
 
@@ -60,7 +68,7 @@ describe('marked unit', () => {
 
   describe('use extension', () => {
     it('should use custom block tokenizer + renderer extensions', () => {
-      const underline = {
+      const underline: TokenizerAndRendererExtension = {
         name: 'underline',
         level: 'block',
         tokenizer(src) {
@@ -87,7 +95,7 @@ describe('marked unit', () => {
     });
 
     it('should interrupt paragraphs if using "start" property', () => {
-      const underline = {
+      const underline: TestExtension = {
         extensions: [{
           name: 'underline',
           level: 'block',
@@ -114,7 +122,7 @@ describe('marked unit', () => {
     });
 
     it('should not return list if no items', () => {
-      const noHr = {
+      const noHr: TestExtension = {
         tokenizer: {
           hr() {
             return undefined;
@@ -128,7 +136,7 @@ describe('marked unit', () => {
     });
 
     it('should use custom inline tokenizer + renderer extensions', () => {
-      const underline = {
+      const underline: TokenizerAndRendererExtension = {
         name: 'underline',
         level: 'inline',
         start(src) { return src.indexOf('='); },
@@ -153,7 +161,7 @@ describe('marked unit', () => {
     });
 
     it('should ignore em termination characters when emStrongMask hook is in place', () => {
-      const underline = {
+      const underline: TokenizerAndRendererExtension = {
         name: 'underline',
         level: 'inline',
         start(src) { return src.indexOf('='); },
@@ -184,8 +192,8 @@ describe('marked unit', () => {
     });
 
     it('should combine multiple emStrongMask hooks', () => {
-      const maskEqualSign = (src) => src.replace(/=([^=]+)=/g, (match) => `[${'a'.repeat(match.length - 2)}]`);
-      const maskDollarSign = (src) => src.replace(/\$([^$]+)\$/g, (match) => `[${'b'.repeat(match.length - 2)}]`);
+      const maskEqualSign = (src: string) => src.replace(/=([^=]+)=/g, (match) => `[${'a'.repeat(match.length - 2)}]`);
+      const maskDollarSign = (src: string) => src.replace(/\$([^$]+)\$/g, (match) => `[${'b'.repeat(match.length - 2)}]`);
       marked.use({ hooks: { emStrongMask: maskEqualSign } });
       marked.use({ hooks: { emStrongMask: maskDollarSign } });
       const html = marked.parse('*Before $dollar * dollar$ =equal * equal= after*');
@@ -193,7 +201,7 @@ describe('marked unit', () => {
     });
 
     it('should handle interacting block and inline extensions', () => {
-      const descriptionlist = {
+      const descriptionlist: TokenizerAndRendererExtension = {
         name: 'descriptionList',
         level: 'block',
         start(src) {
@@ -217,11 +225,11 @@ describe('marked unit', () => {
           }
         },
         renderer(token) {
-          return `<dl>${this.parser.parseInline(token.tokens)}\n</dl>`;
+          return `<dl>${this.parser.parseInline(token.tokens ?? [])}\n</dl>`;
         },
       };
 
-      const description = {
+      const description: TokenizerAndRendererExtension = {
         name: 'description',
         level: 'inline',
         start(src) { return src.indexOf(':'); },
@@ -256,7 +264,7 @@ describe('marked unit', () => {
     });
 
     it('should allow other options mixed into the extension', () => {
-      const extension = {
+      const extension: TokenizerAndRendererExtension = {
         name: 'underline',
         level: 'block',
         start(src) { return src.indexOf(':'); },
@@ -281,7 +289,7 @@ describe('marked unit', () => {
     });
 
     it('should handle renderers that return false', () => {
-      const extension = {
+      const extension: TokenizerAndRendererExtension = {
         name: 'test',
         level: 'block',
         tokenizer(src) {
@@ -302,7 +310,7 @@ describe('marked unit', () => {
           return false;
         },
       };
-      const fallbackRenderer = {
+      const fallbackRenderer: TokenizerAndRendererExtension = {
         name: 'test',
         level: 'block',
         renderer(token) {
@@ -318,7 +326,7 @@ describe('marked unit', () => {
     });
 
     it('should fall back when tokenizers return false', () => {
-      const extension = {
+      const extension: TokenizerAndRendererExtension = {
         name: 'test',
         level: 'block',
         tokenizer(src) {
@@ -331,13 +339,13 @@ describe('marked unit', () => {
               text: match[1].trim(), // You can add additional properties to your tokens to pass along to the renderer
             };
           }
-          return false;
+          return fallback;
         },
         renderer(token) {
           return token.text;
         },
       };
-      const extension2 = {
+      const extension2: TokenizerAndRendererExtension = {
         name: 'test',
         level: 'block',
         tokenizer(src) {
@@ -352,7 +360,7 @@ describe('marked unit', () => {
               };
             }
           }
-          return false;
+          return fallback;
         },
       };
       marked.use({ extensions: [extension, extension2] });
@@ -361,12 +369,12 @@ describe('marked unit', () => {
     });
 
     it('should override original tokenizer/renderer with same name, but fall back if returns false', () => {
-      const extension = {
+      const extension: TestExtension = {
         extensions: [{
           name: 'heading',
           level: 'block',
           tokenizer(src) {
-            return false; // fall back to default `heading` tokenizer
+            return fallback; // fall back to default `heading` tokenizer
           },
           renderer(token) {
             return '<h' + token.depth + '>' + token.text + ' RENDERER EXTENSION</h' + token.depth + '>\n';
@@ -397,7 +405,7 @@ describe('marked unit', () => {
     });
 
     it('should walk only specified child tokens', () => {
-      const walkableDescription = {
+      const walkableDescription: TestExtension = {
         extensions: [{
           name: 'walkableDescription',
           level: 'inline',
@@ -419,7 +427,7 @@ describe('marked unit', () => {
             }
           },
           renderer(token) {
-            return `\n<dt>${this.parser.parseInline(token.dt)} - ${this.parser.parseInline(token.tokens)}</dt><dd>${this.parser.parseInline(token.dd)}</dd>`;
+            return `\n<dt>${this.parser.parseInline(token.dt)} - ${this.parser.parseInline(token.tokens ?? [])}</dt><dd>${this.parser.parseInline(token.dd)}</dd>`;
           },
           childTokens: ['dd', 'dt'],
         }],
@@ -437,7 +445,7 @@ describe('marked unit', () => {
     });
 
     it('should walk child token arrays', () => {
-      const walkableDescription = {
+      const walkableDescription: TestExtension = {
         extensions: [{
           name: 'walkableDescription',
           level: 'inline',
@@ -474,7 +482,7 @@ describe('marked unit', () => {
     });
 
     describe('multiple extensions', () => {
-      function createExtension(name) {
+      function createExtension(name: string): TestExtension {
         return {
           extensions: [{
             name: `block-${name}`,
@@ -494,7 +502,7 @@ describe('marked unit', () => {
               }
             },
             renderer(token) {
-              return `<${token.type}>${this.parser.parseInline(token.tokens)}</${token.type}>\n`;
+              return `<${token.type}>${this.parser.parseInline(token.tokens ?? [])}</${token.type}>\n`;
             },
           }, {
             name: `inline-${name}`,
@@ -517,7 +525,7 @@ describe('marked unit', () => {
             heading(src) {
               if (src.startsWith(`# ${name}`)) {
                 const token = {
-                  type: 'heading',
+                  type: 'heading' as const,
                   raw: `# ${name}`,
                   text: `used ${name}`,
                   depth: 1,
@@ -539,21 +547,22 @@ describe('marked unit', () => {
             },
           },
           walkTokens(token) {
-            if (token.text === `used ${name}`) {
-              token.text += ' walked';
+            const generic = token as Tokens.Generic;
+            if (generic.text === `used ${name}`) {
+              generic.text += ' walked';
             }
           },
         };
       }
 
-      function createFalseExtension(name) {
+      function createFalseExtension(name: string): TestExtension {
         return {
           extensions: [{
             name: `block-${name}`,
             level: 'block',
             start(src) { return src.indexOf('::'); },
             tokenizer(src, tokens) {
-              return false;
+              return fallback;
             },
             renderer(token) {
               return false;
@@ -563,7 +572,7 @@ describe('marked unit', () => {
             level: 'inline',
             start(src) { return src.indexOf(':'); },
             tokenizer(src, tokens) {
-              return false;
+              return fallback;
             },
             renderer(token) {
               return false;
@@ -677,7 +686,7 @@ used extension2 walked</p>
     });
 
     it('should ignore em termination characters when emStrongMask hook is in place in an async context', async() => {
-      const underline = {
+      const underline: TokenizerAndRendererExtension = {
         name: 'underline',
         level: 'inline',
         start(src) { return src.indexOf('='); },
@@ -709,7 +718,7 @@ used extension2 walked</p>
     });
 
     it('should allow deleting/editing tokens', () => {
-      const styleTags = {
+      const styleTags: TestExtension = {
         extensions: [{
           name: 'inlineStyleTag',
           level: 'inline',
@@ -744,13 +753,14 @@ used extension2 walked</p>
           },
         }],
         walkTokens(token) {
-          if (token.tokens) {
-            const finalChildToken = token.tokens.at(-1);
+          const generic = token as Tokens.Generic;
+          if (generic.tokens) {
+            const finalChildToken = generic.tokens.at(-1) as Tokens.Generic | undefined;
             if (finalChildToken?.type === 'inlineStyleTag') {
-              token.originalType = token.type;
-              token.type = 'styled';
-              token.style = `style="color:${finalChildToken.text};"`;
-              token.tokens.pop();
+              generic.originalType = generic.type;
+              generic.type = 'styled';
+              generic.style = `style="color:${finalChildToken.text};"`;
+              generic.tokens.pop();
             }
           }
         },
@@ -763,7 +773,7 @@ used extension2 walked</p>
     });
 
     it('should use renderer', () => {
-      const extension = {
+      const extension: TestExtension = {
         useNewRenderer: true,
         renderer: {
           paragraph() {
@@ -771,19 +781,19 @@ used extension2 walked</p>
           },
         },
       };
-      mock.method(extension.renderer, 'paragraph');
+      const paragraphMock = mock.method(extension.renderer as { paragraph: (token: Tokens.Paragraph) => string }, 'paragraph');
       marked.use(extension);
       const html = marked.parse('text');
-      assert.strictEqual(extension.renderer.paragraph.mock.calls[0].arguments[0].raw, 'text');
+      assert.strictEqual(paragraphMock.mock.calls[0].arguments[0].raw, 'text');
       assert.strictEqual(html, 'extension');
     });
 
     it('should use tokenizer', () => {
-      const extension = {
+      const extension: TestExtension = {
         tokenizer: {
           paragraph(text) {
             const token = {
-              type: 'paragraph',
+              type: 'paragraph' as const,
               raw: text,
               text: 'extension',
               tokens: [],
@@ -793,16 +803,16 @@ used extension2 walked</p>
           },
         },
       };
-      mock.method(extension.tokenizer, 'paragraph');
+      const paragraphMock = mock.method(extension.tokenizer as { paragraph: (src: string) => unknown }, 'paragraph');
       marked.use(extension);
       const html = marked.parse('text');
-      assert.strictEqual(extension.tokenizer.paragraph.mock.calls[0].arguments[0], 'text');
+      assert.strictEqual(paragraphMock.mock.calls[0].arguments[0], 'text');
       assert.strictEqual(html, '<p>extension</p>\n');
     });
 
     it('should use walkTokens', () => {
       let walked = 0;
-      const extension = {
+      const extension: TestExtension = {
         walkTokens(token) {
           walked++;
         },
@@ -813,7 +823,7 @@ used extension2 walked</p>
     });
 
     it('should use options from extension', () => {
-      const extension = {
+      const extension: TestExtension = {
         breaks: true,
       };
       marked.use(extension);
@@ -824,17 +834,17 @@ used extension2 walked</p>
     it('should call all walkTokens in reverse order', () => {
       let walkedOnce = 0;
       let walkedTwice = 0;
-      const extension1 = {
+      const extension1: TestExtension = {
         walkTokens(token) {
-          if (token.walkedOnce) {
+          if ((token as Tokens.Generic).walkedOnce) {
             walkedTwice++;
           }
         },
       };
-      const extension2 = {
+      const extension2: TestExtension = {
         walkTokens(token) {
           walkedOnce++;
-          token.walkedOnce = true;
+          (token as Tokens.Generic).walkedOnce = true;
         },
       };
       marked.use(extension1);
@@ -845,7 +855,7 @@ used extension2 walked</p>
     });
 
     it('should use last extension function and not override others', () => {
-      const extension1 = {
+      const extension1: TestExtension = {
         useNewRenderer: true,
         renderer: {
           paragraph() {
@@ -856,7 +866,7 @@ used extension2 walked</p>
           },
         },
       };
-      const extension2 = {
+      const extension2: TestExtension = {
         useNewRenderer: true,
         renderer: {
           paragraph() {
@@ -877,7 +887,7 @@ paragraph
     });
 
     it('should use previous extension when returning false', () => {
-      const extension1 = {
+      const extension1: TestExtension = {
         useNewRenderer: true,
         renderer: {
           paragraph({ text }) {
@@ -888,7 +898,7 @@ paragraph
           },
         },
       };
-      const extension2 = {
+      const extension2: TestExtension = {
         useNewRenderer: true,
         renderer: {
           paragraph({ text }) {
@@ -912,11 +922,12 @@ original
     });
 
     it('should get options with this.options', () => {
-      const extension = {
+      const extension: TestExtension = {
         useNewRenderer: true,
         renderer: {
           heading: () => {
-            return this && this.options ? 'arrow options\n' : 'arrow no options\n';
+            const self = this as unknown as { options?: unknown } | undefined;
+            return self && self.options ? 'arrow options\n' : 'arrow no options\n';
           },
           html: function() {
             return this.options ? 'function options\n' : 'function no options\n';
@@ -978,7 +989,7 @@ br
 br
 `;
       const tokens = lexer(markdown, { ...getDefaults(), breaks: true });
-      const tokensSeen = [];
+      const tokensSeen: [string, string][] = [];
       walkTokens(tokens, (token) => {
         tokensSeen.push([token.type, (token.raw || '').replace(/\n/g, '')]);
       });
@@ -1049,11 +1060,11 @@ br
         walkTokens(token) {
           if (token.type === 'em') {
             token.text += ' walked';
-            token.tokens = this.Lexer.lexInline(token.text);
+            token.tokens = (this as unknown as Marked).Lexer.lexInline(token.text);
           }
         },
       });
-      assert.strictEqual(marked.parse('*text*').trim(), '<p><em>text walked</em></p>');
+      assert.strictEqual((marked.parse('*text*') as string).trim(), '<p><em>text walked</em></p>');
     });
 
     it('should wait for async `walkTokens` function', async() => {
@@ -1063,7 +1074,7 @@ br
           if (token.type === 'em') {
             await timeout();
             token.text += ' walked';
-            token.tokens = this.Lexer.lexInline(token.text);
+            token.tokens = (this as unknown as Marked).Lexer.lexInline(token.text);
           }
         },
       });

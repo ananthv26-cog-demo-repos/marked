@@ -1,11 +1,18 @@
-import { Lexer } from '../../lib/marked.esm.js';
+import { Lexer } from 'marked';
+import type { Links, MarkedOptions, Token, Tokenizer, TokensList } from 'marked';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 
-function expectTokens({ md, options, tokens = [], links = {}, log = false }) {
+function expectTokens({ md, options, tokens = [], links = {}, log = false }: {
+  md: string;
+  options?: MarkedOptions;
+  tokens?: Token[];
+  links?: Links;
+  log?: boolean;
+}): void {
   const lexer = new Lexer(options);
   const actual = lexer.lex(md);
-  const expected = tokens;
+  const expected = tokens as TokensList;
   expected.links = links;
   if (log) {
     console.log(JSON.stringify(
@@ -17,10 +24,15 @@ function expectTokens({ md, options, tokens = [], links = {}, log = false }) {
   assert.deepEqual(actual, expected);
 }
 
-function expectInlineTokens({ md, options, tokens, links = {} }) {
+function expectInlineTokens({ md, options, tokens, links = {} }: {
+  md: string;
+  options?: MarkedOptions;
+  tokens: Token[];
+  links?: Links;
+}): void {
   const lexer = new Lexer(options);
   lexer.tokens.links = links;
-  const outTokens = [];
+  const outTokens: Token[] = [];
   lexer.inlineTokens(md, outTokens);
   assert.deepEqual(outTokens, tokens);
 }
@@ -35,7 +47,7 @@ describe('Lexer', () => {
         headingBeginRegex,
         htmlBeginRegex,
         blockquoteBeginRegex,
-      } = new Lexer().tokenizer.rules.other;
+      } = (new Lexer() as unknown as { tokenizer: Tokenizer }).tokenizer.rules.other;
 
       assert.ok(nextBulletRegex(0).test('- item\n'));
       assert.ok(hrRegex(0).test('---\n'));

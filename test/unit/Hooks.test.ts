@@ -1,9 +1,10 @@
-import { Marked } from '../../lib/marked.esm.js';
+import { Marked } from 'marked';
+import type { Token, Tokens } from 'marked';
 import { timeout } from './utils.ts';
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert';
 
-function createHeadingToken(text) {
+function createHeadingToken(text: string): Tokens.Heading {
   return {
     type: 'heading',
     raw: `# ${text}`,
@@ -16,7 +17,7 @@ function createHeadingToken(text) {
 }
 
 describe('Hooks', () => {
-  let marked;
+  let marked: Marked;
   beforeEach(() => {
     marked = new Marked();
   });
@@ -29,7 +30,7 @@ describe('Hooks', () => {
         },
       },
     });
-    const html = marked.parse('*text*');
+    const html = marked.parse('*text*') as string;
     assert.strictEqual(html.trim(), '<h1>preprocess</h1>\n<p><em>text</em></p>');
   });
 
@@ -58,7 +59,7 @@ describe('Hooks', () => {
         },
       },
     });
-    const html = marked.parse('line1\nline2');
+    const html = marked.parse('line1\nline2') as string;
     assert.strictEqual(html.trim(), '<p>line1<br>line2</p>');
   });
 
@@ -85,7 +86,7 @@ describe('Hooks', () => {
         },
       },
     });
-    const html = marked.parse('*text*');
+    const html = marked.parse('*text*') as string;
     assert.strictEqual(html.trim(), '<p><em>text</em></p>\n<h1>postprocess</h1>');
   });
 
@@ -115,12 +116,12 @@ describe('Hooks', () => {
       },
       walkTokens(token) {
         if (token.type === 'heading') {
-          token.tokens[0].text += ' walked';
+          const heading = token as Tokens.Heading;
+          (heading.tokens[0] as Tokens.Text).text += ' walked';
         }
-        return token;
       },
     });
-    const html = marked.parse('*text*');
+    const html = marked.parse('*text*') as string;
     assert.strictEqual(html.trim(), '<p><em>text</em></p>\n<h1>processAllTokens walked</h1>');
   });
 
@@ -136,9 +137,9 @@ describe('Hooks', () => {
       },
       walkTokens(token) {
         if (token.type === 'heading') {
-          token.tokens[0].text += ' walked';
+          const heading = token as Tokens.Heading;
+          (heading.tokens[0] as Tokens.Text).text += ' walked';
         }
-        return token;
       },
     });
     const promise = marked.parse('*text*');
@@ -199,7 +200,7 @@ describe('Hooks', () => {
         },
       },
     });
-    const html = marked.parse('text');
+    const html = marked.parse('text') as string;
     assert.strictEqual(html.trim(), '<h1>text</h1>');
   });
 
@@ -208,10 +209,10 @@ describe('Hooks', () => {
       async: true,
       hooks: {
         provideLexer() {
-          return async(src) => {
+          return (async(src: string) => {
             await timeout();
             return [createHeadingToken(src)];
-          };
+          }) as unknown as (src: string) => Token[];
         },
       },
     });
@@ -241,10 +242,10 @@ describe('Hooks', () => {
       hooks: {
         async provideLexer() {
           await timeout();
-          return async(src) => {
+          return (async(src: string) => {
             await timeout();
             return [createHeadingToken(src)];
-          };
+          }) as unknown as (src: string) => Token[];
         },
       },
     });
@@ -253,14 +254,15 @@ describe('Hooks', () => {
   });
 
   it('should provide parser return object', () => {
-    marked.use({
+    const m = new Marked<{ text: string }>();
+    m.use({
       hooks: {
         provideParser() {
           return (tokens) => ({ text: 'test parser' });
         },
       },
     });
-    const html = marked.parse('text');
+    const html = m.parse('text') as { text: string };
     assert.strictEqual(html.text, 'test parser');
   });
 
@@ -272,12 +274,13 @@ describe('Hooks', () => {
         },
       },
     });
-    const html = marked.parse('text');
+    const html = marked.parse('text') as string;
     assert.strictEqual(html.trim(), 'test parser');
   });
 
   it('should provide parser async', async() => {
-    marked.use({
+    const m = new Marked<Promise<string>>();
+    m.use({
       async: true,
       hooks: {
         provideParser() {
@@ -288,7 +291,7 @@ describe('Hooks', () => {
         },
       },
     });
-    const html = await marked.parse('text');
+    const html = await m.parse('text');
     assert.strictEqual(html.trim(), 'test parser');
   });
 
@@ -309,7 +312,8 @@ describe('Hooks', () => {
   });
 
   it('should provide async parser from async hook', async() => {
-    marked.use({
+    const m = new Marked<Promise<string>>();
+    m.use({
       async: true,
       hooks: {
         async provideParser() {
@@ -321,7 +325,7 @@ describe('Hooks', () => {
         },
       },
     });
-    const html = await marked.parse('text');
+    const html = await m.parse('text');
     assert.strictEqual(html.trim(), 'test parser');
   });
 
@@ -392,7 +396,7 @@ describe('Hooks', () => {
   });
 
   it('should pass correct block to provideLexer for concurrent async parse and parseInline', async() => {
-    const receivedBlocks = [];
+    const receivedBlocks: (boolean | undefined)[] = [];
     marked.use({
       async: true,
       hooks: {
@@ -442,7 +446,7 @@ describe('Hooks', () => {
   });
 
   it('should pass correct block to provideParser for concurrent async parse and parseInline', async() => {
-    const receivedBlocks = [];
+    const receivedBlocks: (boolean | undefined)[] = [];
     marked.use({
       async: true,
       hooks: {
