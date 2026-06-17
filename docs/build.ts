@@ -1,12 +1,14 @@
-/* global marked */
-import '../lib/marked.umd.js';
 import { promises } from 'fs';
 import { join, dirname, parse, format } from 'path';
 import { fileURLToPath } from 'url';
 import { markedHighlight } from 'marked-highlight';
-import { HighlightJS } from 'highlight.js';
+import HighlightJS from 'highlight.js';
 import titleize from 'titleize';
 import { getTests } from '@markedjs/testutils';
+import * as esbuild from 'esbuild';
+import { Marked } from '../src/marked.ts';
+import type { FormatInputPathObject } from 'path';
+import type { Tests } from '@markedjs/testutils';
 
 const { mkdir, rm, readdir, stat, readFile, writeFile, copyFile } = promises;
 const { highlight, highlightAuto } = HighlightJS;
@@ -16,9 +18,9 @@ const __dirname = dirname(__filename);
 const inputDir = join(cwd, 'docs');
 const outputDir = join(cwd, 'public');
 const templateFile = join(inputDir, '_document.html');
-const isUppercase = str => /[A-Z_]+/.test(str);
-const getTitle = str => str === 'INDEX' ? '' : titleize(str.replace(/_/g, ' ')) + ' - ';
-function convertTestsToTable(name, tests) {
+const isUppercase = (str: string): boolean => /[A-Z_]+/.test(str);
+const getTitle = (str: string): string => str === 'INDEX' ? '' : titleize(str.replace(/_/g, ' ')) + ' - ';
+function convertTestsToTable(name: string, tests: Tests): string {
   let total = 0;
   let passing = 0;
   let table = '\n| Section | Passing | Percent |\n';
@@ -37,14 +39,14 @@ function convertTestsToTable(name, tests) {
 </details>\n`;
 }
 
-const markedInstance = new marked.Marked(markedHighlight((code, language) => {
+const markedInstance = new Marked(markedHighlight((code, language) => {
   if (!language) {
     return highlightAuto(code).value;
   }
   return highlight(code, { language }).value;
 }));
 
-async function init() {
+async function init(): Promise<void> {
   console.log('Cleaning up output directory ' + outputDir);
   await rm(outputDir, { force: true, recursive: true });
   await mkdir(outputDir);
@@ -75,12 +77,12 @@ async function init() {
 }
 
 const ignoredFiles = [
-  join(cwd, 'docs', 'build.js'),
+  join(cwd, 'docs', 'build.ts'),
   join(cwd, 'docs', '.eslintrc.json'),
   join(cwd, 'docs', '_document.html'),
 ];
 
-async function build(currentDir, tmpl, testResultsTable) {
+async function build(currentDir: string, tmpl: string, testResultsTable?: string): Promise<void> {
   const files = await readdir(currentDir);
   for (const file of files) {
     const filename = join(currentDir, file);
@@ -93,10 +95,11 @@ async function build(currentDir, tmpl, testResultsTable) {
       await build(filename, tmpl);
     } else {
       let html = await readFile(filename, 'utf8');
-      const parsed = parse(filename);
-      if (parsed.ext === '.md' && isUppercase(parsed.name)) {
+      const parsed: FormatInputPathObject = parse(filename);
+      if (parsed.ext === '.md' && parsed.name && isUppercase(parsed.name)) {
         const mdHtml = markedInstance.parse(
-          html.replace('<!--{{test-results-table}}-->', testResultsTable),
+          html.replace('<!--{{test-results-table}}-->', testResultsTable ?? ''),
+          { async: false },
         );
         html = tmpl
           .replace('<!--{{title}}-->', getTitle(parsed.name))
@@ -104,8 +107,16 @@ async function build(currentDir, tmpl, testResultsTable) {
         parsed.ext = '.html';
         parsed.name = parsed.name.toLowerCase();
         delete parsed.base;
+      } else if (parsed.ext === '.ts') {
+        const { code } = await esbuild.transform(html, {
+          loader: 'ts',
+          sourcefile: filename,
+        });
+        html = code;
+        parsed.ext = '.js';
+        delete parsed.base;
       }
-      parsed.dir = parsed.dir.replace(inputDir, outputDir);
+      parsed.dir = (parsed.dir ?? '').replace(inputDir, outputDir);
       const outfile = format(parsed);
       await mkdir(dirname(outfile), { recursive: true });
       console.log('Writing file ' + outfile);

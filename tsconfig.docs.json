@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "marked": [
+        "./src/marked.ts"
+      ]
+    }
+  },
+  "include": [
+    "docs/build.ts",
+    "docs/js/index.ts",
+    "docs/demo/demo.ts",
+    "docs/demo/worker.ts"
+  ]
+}

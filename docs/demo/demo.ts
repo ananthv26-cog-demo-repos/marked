@@ -1,34 +1,64 @@
+type ThemePreference = 'system' | 'light' | 'dark';
+type Theme = 'light' | 'dark';
+
+interface DemoWorker extends Worker {
+  working?: boolean;
+  timeout?: ReturnType<typeof setTimeout>;
+}
+
+interface WorkerMessage {
+  task: string;
+  version: string;
+  markdown?: string;
+  options?: Record<string, unknown>;
+  id?: string;
+}
+
+interface WorkerResponse {
+  id: string;
+  task: 'defaults' | 'parse';
+  defaults?: Record<string, unknown>;
+  parsed?: string;
+  lexed?: string;
+  time?: number;
+}
+
+interface JsdelivrResponse {
+  versions: string[];
+  tags: { latest: string };
+}
+
 onunhandledrejection = (e) => {
   throw e.reason;
 };
 
-const $loadingElem = document.querySelector('#loading');
-const $mainElem = document.querySelector('#main');
-const $markdownElem = document.querySelector('#markdown');
-const $markedVerElem = document.querySelector('#markedVersion');
-const $optionsElem = document.querySelector('#options');
-const $outputTypeElem = document.querySelector('#outputType');
-const $inputTypeElem = document.querySelector('#inputType');
-const $responseTimeElem = document.querySelector('#responseTime');
-const $previewElem = document.querySelector('#preview');
-const $previewIframe = document.querySelector('#preview iframe');
-const $permalinkElem = document.querySelector('#permalink');
-const $clearElem = document.querySelector('#clear');
-const $htmlElem = document.querySelector('#html');
-const $lexerElem = document.querySelector('#lexer');
-const $panes = document.querySelectorAll('.pane');
-const $inputPanes = document.querySelectorAll('.inputPane');
+const $loadingElem = document.querySelector<HTMLElement>('#loading')!;
+const $mainElem = document.querySelector<HTMLElement>('#main')!;
+const $markdownElem = document.querySelector<HTMLTextAreaElement>('#markdown')!;
+const $markedVerElem = document.querySelector<HTMLSelectElement>('#markedVersion')!;
+const $optionsElem = document.querySelector<HTMLTextAreaElement>('#options')!;
+const $outputTypeElem = document.querySelector<HTMLSelectElement>('#outputType')!;
+const $inputTypeElem = document.querySelector<HTMLSelectElement>('#inputType')!;
+const $responseTimeElem = document.querySelector<HTMLElement>('#responseTime')!;
+const $previewElem = document.querySelector<HTMLElement>('#preview')!;
+const $previewIframe = document.querySelector<HTMLIFrameElement>('#preview iframe')!;
+const $permalinkElem = document.querySelector<HTMLAnchorElement>('#permalink')!;
+const $clearElem = document.querySelector<HTMLElement>('#clear')!;
+const $htmlElem = document.querySelector<HTMLTextAreaElement>('#html')!;
+const $lexerElem = document.querySelector<HTMLTextAreaElement>('#lexer')!;
+const $panes = Array.from(document.querySelectorAll<HTMLElement>('.pane'));
+const $inputPanes = Array.from(document.querySelectorAll<HTMLElement>('.inputPane'));
 let lastInput = '';
 let inputDirty = true;
-let $activeOutputElem = null;
+let $activeOutputElem: HTMLElement | null = null;
 let latestVersion = 'master';
 const search = searchToObject();
-const markedVersions = {
+const markedVersions: Record<string, string> = {
   master: '../',
 };
 let delayTime = 1;
-let checkChangeTimeout = null;
-let markedWorker;
+let checkChangeTimeout: number | undefined;
+let markedWorker: DemoWorker | undefined;
 
 $previewIframe.addEventListener('load', handleIframeLoad);
 
@@ -57,14 +87,14 @@ const $themeToggleText = $themeToggle ? $themeToggle.querySelector('[data-theme-
 
 const THEME_STORAGE_KEY = 'theme-preference';
 const LEGACY_STORAGE_KEY = 'theme';
-const THEME_ORDER = ['system', 'light', 'dark'];
-const TOGGLE_UI = {
+const THEME_ORDER: ThemePreference[] = ['system', 'light', 'dark'];
+const TOGGLE_UI: Record<ThemePreference, { icon: string; text: string }> = {
   system: { icon: 'brightness_auto', text: 'System' },
   light: { icon: 'light_mode', text: 'Light' },
   dark: { icon: 'dark_mode', text: 'Dark' },
 };
 
-function applyTheme(theme) {
+function applyTheme(theme: Theme): void {
   if (theme === 'dark') {
     document.documentElement.classList.add('dark');
   } else {
@@ -85,18 +115,18 @@ function applyTheme(theme) {
   }
 }
 
-function getSystemTheme() {
+function getSystemTheme(): Theme {
   if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
     return 'dark';
   }
   return 'light';
 }
 
-function sanitisePreference(value) {
-  return THEME_ORDER.includes(value) ? value : null;
+function sanitisePreference(value: string | null): ThemePreference | null {
+  return value === 'system' || value === 'light' || value === 'dark' ? value : null;
 }
 
-function readStoredPreference() {
+function readStoredPreference(): ThemePreference | null {
   try {
     const stored = sanitisePreference(localStorage.getItem(THEME_STORAGE_KEY));
     if (stored) {
@@ -108,7 +138,7 @@ function readStoredPreference() {
   }
 }
 
-function writeStoredPreference(preference) {
+function writeStoredPreference(preference: ThemePreference): void {
   try {
     localStorage.setItem(THEME_STORAGE_KEY, preference);
     if (preference === 'light' || preference === 'dark') {
@@ -121,11 +151,11 @@ function writeStoredPreference(preference) {
   }
 }
 
-function getEffectiveTheme(preference) {
+function getEffectiveTheme(preference: ThemePreference): Theme {
   return preference === 'system' ? getSystemTheme() : preference;
 }
 
-function updateToggle(preference) {
+function updateToggle(preference: ThemePreference): void {
   if (!$themeToggle) {
     return;
   }
@@ -142,9 +172,9 @@ function updateToggle(preference) {
   $themeToggle.title = label;
 }
 
-let currentPreference = readStoredPreference() || 'system';
+let currentPreference: ThemePreference = readStoredPreference() || 'system';
 
-function applyPreference(preference, persist) {
+function applyPreference(preference: ThemePreference, persist: boolean): void {
   currentPreference = preference;
   const effectiveTheme = getEffectiveTheme(preference);
   applyTheme(effectiveTheme);
@@ -168,7 +198,7 @@ if ($themeToggle) {
 
 const systemMatcher = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 if (systemMatcher) {
-  const handleSystemChange = function() {
+  const handleSystemChange = function(): void {
     if (currentPreference === 'system') {
       applyPreference('system', false);
     }
@@ -201,7 +231,7 @@ Promise.all([
       'Failed to load marked. Refresh the page to try again.';
   });
 
-function setInitialText() {
+function setInitialText(): Promise<void> | void {
   if ('text' in search) {
     $markdownElem.value = search.text;
   } else {
@@ -215,18 +245,18 @@ function setInitialText() {
   }
 }
 
-function setInitialQuickref() {
+function setInitialQuickref(): Promise<void> {
   return fetch('./quickref.md')
     .then((res) => res.text())
     .then((text) => {
-      document.querySelector('#quickref').value = text;
+      document.querySelector<HTMLTextAreaElement>('#quickref')!.value = text;
     });
 }
 
-function setInitialVersion() {
+function setInitialVersion(): Promise<void> {
   return fetch('https://data.jsdelivr.com/v1/package/npm/marked')
     .then((res) => res.json())
-    .then((json) => {
+    .then((json: JsdelivrResponse) => {
       for (const ver of json.versions) {
         markedVersions[ver] = 'https://cdn.jsdelivr.net/npm/marked@' + ver;
         const opt = document.createElement('option');
@@ -238,8 +268,10 @@ function setInitialVersion() {
       if (location.host === 'marked.js.org') {
         latestVersion = json.tags.latest;
       } else {
-        $markedVerElem.querySelector('option[value="master"]').textContent =
-          'This Build';
+        const masterOption = $markedVerElem.querySelector('option[value="master"]');
+        if (masterOption) {
+          masterOption.textContent = 'This Build';
+        }
       }
 
       if (search.version && markedVersions[search.version]) {
@@ -252,7 +284,7 @@ function setInitialVersion() {
     .then(updateVersion);
 }
 
-function setInitialOptions() {
+function setInitialOptions(): Promise<void> | void {
   if ('options' in search) {
     $optionsElem.value = search.options;
   } else {
@@ -260,13 +292,13 @@ function setInitialOptions() {
   }
 }
 
-function setInitialOutputType() {
+function setInitialOutputType(): void {
   if (search.outputType) {
     $outputTypeElem.value = search.outputType;
   }
 }
 
-function handleIframeLoad() {
+function handleIframeLoad(): void {
   lastInput = '';
   inputDirty = true;
 
@@ -287,32 +319,32 @@ function handleIframeLoad() {
   }
 }
 
-function handleInput() {
+function handleInput(): void {
   inputDirty = true;
 }
 
-function handleVersionChange() {
+function handleVersionChange(): void {
   updateVersion();
 }
 
-function handleClearClick() {
+function handleClearClick(): void {
   $markdownElem.value = '';
   $markedVerElem.value = latestVersion;
   updateVersion();
   setDefaultOptions();
 }
 
-function handleInputChange() {
+function handleInputChange(): void {
   handleChange($inputPanes, $inputTypeElem.value);
 }
 
-function handleOutputChange() {
+function handleOutputChange(): void {
   $activeOutputElem = handleChange($panes, $outputTypeElem.value);
   updateLink();
 }
 
-function handleChange(panes, visiblePane) {
-  let active = null;
+function handleChange(panes: HTMLElement[], visiblePane: string): HTMLElement | null {
+  let active: HTMLElement | null = null;
   for (let i = 0; i < panes.length; i++) {
     if (panes[i].id === visiblePane) {
       panes[i].style.display = '';
@@ -324,14 +356,14 @@ function handleChange(panes, visiblePane) {
   return active;
 }
 
-function setDefaultOptions() {
+function setDefaultOptions(): Promise<void> {
   return messageWorker({
     task: 'defaults',
     version: markedVersions[$markedVerElem.value],
   });
 }
 
-function setOptions(opts) {
+function setOptions(opts: unknown): void {
   $optionsElem.value = JSON.stringify(
     opts,
     (key, value) => {
@@ -347,10 +379,10 @@ function setOptions(opts) {
   );
 }
 
-function searchToObject() {
+function searchToObject(): Record<string, string> {
   // modified from https://stackoverflow.com/a/7090123/806777
   const pairs = location.search.slice(1).split('&');
-  const obj = {};
+  const obj: Record<string, string> = {};
 
   for (let i = 0; i < pairs.length; i++) {
     if (pairs[i] === '') {
@@ -359,13 +391,13 @@ function searchToObject() {
 
     const pair = pairs[i].split('=');
 
-    obj[decodeURIComponent(pair.shift())] = decodeURIComponent(pair.join('='));
+    obj[decodeURIComponent(pair.shift() ?? '')] = decodeURIComponent(pair.join('='));
   }
 
   return obj;
 }
 
-function getScrollSize() {
+function getScrollSize(): number {
   if (!$activeOutputElem) {
     return 0;
   }
@@ -375,7 +407,7 @@ function getScrollSize() {
   return e.scrollHeight - e.clientHeight;
 }
 
-function getScrollPercent() {
+function getScrollPercent(): number {
   if (!$activeOutputElem) {
     return 1;
   }
@@ -389,13 +421,13 @@ function getScrollPercent() {
   return $activeOutputElem.scrollTop / size;
 }
 
-function setScrollPercent(percent) {
+function setScrollPercent(percent: number): void {
   if ($activeOutputElem) {
     $activeOutputElem.scrollTop = percent * getScrollSize();
   }
 }
 
-function updateLink() {
+function updateLink(): void {
   let outputType = '';
   if ($outputTypeElem.value !== 'preview') {
     outputType = 'outputType='
@@ -414,20 +446,20 @@ function updateLink() {
   history.replaceState('', document.title, $permalinkElem.href);
 }
 
-function updateVersion() {
+function updateVersion(): void {
   handleInput();
 }
 
-function checkForChanges() {
+function checkForChanges(): void {
   if (inputDirty && $markedVerElem.value !== 'pr') {
     inputDirty = false;
 
     updateLink();
 
-    let options = {};
+    let options: Record<string, unknown> = {};
     const optionsString = $optionsElem.value || '{}';
     try {
-      const newOptions = JSON.parse(optionsString);
+      const newOptions = JSON.parse(optionsString) as Record<string, unknown>;
       options = newOptions;
       $optionsElem.classList.remove('error');
     } catch {
@@ -451,8 +483,8 @@ function checkForChanges() {
   checkChangeTimeout = window.setTimeout(checkForChanges, delayTime);
 }
 
-function setResponseTime(ms) {
-  let amount = ms;
+function setResponseTime(ms: number): void {
+  let amount: number | string = ms;
   let suffix = 'ms';
   if (ms > 1000 * 60 * 60) {
     amount = 'Too Long';
@@ -473,28 +505,31 @@ function setResponseTime(ms) {
   );
 }
 
-function setParsed(parsed, lexed) {
+function setParsed(parsed: string, lexed: string): void {
   try {
-    $previewIframe.contentDocument.body.innerHTML = parsed;
+    $previewIframe.contentDocument!.body!.innerHTML = parsed;
   } catch {}
   $htmlElem.value = parsed;
   $lexerElem.value = lexed;
 }
 
-const workerPromises = {};
-function messageWorker(message) {
+const workerPromises: Record<string, () => void> = {};
+function messageWorker(message: WorkerMessage): Promise<void> {
   if (!markedWorker || markedWorker.working) {
     if (markedWorker) {
       clearTimeout(markedWorker.timeout);
       markedWorker.terminate();
     }
     markedWorker = new Worker('worker.js');
-    markedWorker.onmessage = (e) => {
-      clearTimeout(markedWorker.timeout);
-      markedWorker.working = false;
-      switch (e.data.task) {
+    markedWorker.onmessage = (e: MessageEvent) => {
+      const response = e.data as WorkerResponse;
+      clearTimeout(markedWorker?.timeout);
+      if (markedWorker) {
+        markedWorker.working = false;
+      }
+      switch (response.task) {
         case 'defaults': {
-          setOptions(e.data.defaults);
+          setOptions(response.defaults);
           break;
         }
         case 'parse': {
@@ -502,59 +537,68 @@ function messageWorker(message) {
           $htmlElem.classList.remove('error');
           $lexerElem.classList.remove('error');
           const scrollPercent = getScrollPercent();
-          setParsed(e.data.parsed, e.data.lexed);
+          setParsed(response.parsed ?? '', response.lexed ?? '');
           setScrollPercent(scrollPercent);
-          setResponseTime(e.data.time);
+          setResponseTime(response.time ?? 0);
           break;
         }
       }
       clearTimeout(checkChangeTimeout);
       delayTime = 10;
       checkForChanges();
-      workerPromises[e.data.id]();
-      delete workerPromises[e.data.id];
+      workerPromises[response.id]();
+      delete workerPromises[response.id];
     };
-    markedWorker.onerror = markedWorker.onmessageerror = (err) => {
-      clearTimeout(markedWorker.timeout);
-      let error = 'There was an error in the Worker';
-      if (err) {
-        if (err.message) {
-          error = err.message;
-        } else {
-          error = err;
-        }
-      }
-      error = error.replace(/^Uncaught Error: /, '');
-      $previewElem.classList.add('error');
-      $htmlElem.classList.add('error');
-      $lexerElem.classList.add('error');
-      setParsed(error, error);
-      setScrollPercent(0);
-    };
+    markedWorker.onerror = markedWorker.onmessageerror = handleWorkerError;
   }
   if (message.task !== 'defaults') {
-    markedWorker.working = true;
+    if (markedWorker) {
+      markedWorker.working = true;
+    }
     workerTimeout(0);
   }
-  return new Promise((resolve) => {
+  return new Promise<void>((resolve) => {
     message.id = uniqueWorkerMessageId();
     workerPromises[message.id] = resolve;
-    markedWorker.postMessage(message);
+    markedWorker?.postMessage(message);
   });
 }
 
-function uniqueWorkerMessageId() {
-  let id;
+function handleWorkerError(err: ErrorEvent | MessageEvent | string): void {
+  if (markedWorker) {
+    clearTimeout(markedWorker.timeout);
+  }
+  let error = 'There was an error in the Worker';
+  if (err) {
+    if (typeof err === 'string') {
+      error = err;
+    } else if ('message' in err && err.message) {
+      error = err.message;
+    }
+  }
+  error = error.replace(/^Uncaught Error: /, '');
+  $previewElem.classList.add('error');
+  $htmlElem.classList.add('error');
+  $lexerElem.classList.add('error');
+  setParsed(error, error);
+  setScrollPercent(0);
+}
+
+function uniqueWorkerMessageId(): string {
+  let id: string;
   do {
     id = Math.random().toString(36);
   } while (id in workerPromises);
   return id;
 }
 
-function workerTimeout(seconds) {
+function workerTimeout(seconds: number): void {
+  if (!markedWorker) {
+    return;
+  }
   markedWorker.timeout = setTimeout(() => {
     seconds++;
-    markedWorker.onerror(
+    handleWorkerError(
       'Marked has taken longer than '
         + seconds
         + ' second'
