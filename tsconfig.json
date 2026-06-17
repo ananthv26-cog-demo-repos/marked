@@ -12,6 +12,9 @@
     "sourceMap": false
   },
   "include": [
-    "src/*.ts"
+    "src/*.ts",
+    "esbuild.config.ts",
+    "eslint.config.ts",
+    "types/*.d.ts"
   ]
 }
