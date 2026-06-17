@@ -72,6 +72,7 @@
     "semantic-release": "^25.0.5",
     "titleize": "^4.0.0",
     "tslib": "^2.8.1",
+    "tsx": "^4.22.4",
     "typescript": "6.0.3"
   },
   "scripts": {
@@ -93,8 +94,8 @@
     "test:specs": "node --test --test-reporter=spec test/run-spec-tests.js",
     "test:types": "tsc --project tsconfig-type-test.json && attw -P --entrypoints . --profile esm-only",
     "test:umd": "node test/umd-test.js",
-    "test:unit:only": "node --test --test-only --test-reporter=spec test/unit/*.test.js",
-    "test:unit": "node --test --test-reporter=spec test/unit/*.test.js",
+    "test:unit:only": "node --import tsx --test --test-only --test-reporter=spec test/unit/*.test.js",
+    "test:unit": "node --import tsx --test --test-reporter=spec test/unit/*.test.js",
     "test:update": "node test/update-specs.js"
   },
   "engines": {
