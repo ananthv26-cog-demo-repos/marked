@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "marked": [
+        "./lib/marked.d.ts"
+      ]
+    }
+  },
+  "include": [
+    "test/unit/*.ts"
+  ]
+}

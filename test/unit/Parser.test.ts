@@ -1,11 +1,17 @@
-import { Parser } from '../../lib/marked.esm.js';
+import { Parser } from 'marked';
+import type { MarkedOptions, Token } from 'marked';
 import { htmlIsEqual, firstDiff } from '@markedjs/testutils';
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 
-async function expectHtml({ tokens, options, html, inline }) {
+async function expectHtml({ tokens, options, html, inline }: {
+  tokens: { type: string; [key: string]: unknown }[];
+  options?: MarkedOptions;
+  html: string;
+  inline?: boolean;
+}): Promise<void> {
   const parser = new Parser(options);
-  const actual = parser[inline ? 'parseInline' : 'parse'](tokens);
+  const actual = parser[inline ? 'parseInline' : 'parse'](tokens as Token[]);
   const testDiff = await firstDiff(actual, html);
   assert.ok(await htmlIsEqual(html, actual), `Expected: ${testDiff.expected}\n  Actual: ${testDiff.actual}`);
 }
