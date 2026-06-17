@@ -1,8 +1,10 @@
+/// <reference types="node" />
 import * as esbuild from 'esbuild';
 import { umdWrapper } from 'esbuild-plugin-umd-wrapper';
 import fs from 'fs';
 
-const version = process.env.SEMANTIC_RELEASE_NEXT_VERSION || JSON.parse(fs.readFileSync('./package.json')).version;
+const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8')) as { version: string };
+const version = process.env.SEMANTIC_RELEASE_NEXT_VERSION || pkg.version;
 
 console.log('building version:', version);
 
@@ -19,7 +21,15 @@ const banner = `/**
  */
 `;
 
-function config(options) {
+// 'umd' is accepted by esbuild-plugin-umd-wrapper, which is outside esbuild's typed Format union.
+type ConfigFormat = NonNullable<esbuild.BuildOptions['format']> | 'umd';
+
+interface ConfigOptions extends Omit<esbuild.BuildOptions, 'format'> {
+  format: ConfigFormat;
+  outfile: string;
+}
+
+function config(options: ConfigOptions): esbuild.BuildOptions {
   return {
     entryPoints: ['src/marked.ts'],
     banner: {
@@ -36,7 +46,7 @@ function config(options) {
       }
       : {}),
     ...options,
-  };
+  } as esbuild.BuildOptions;
 }
 
 await esbuild.build(config({
