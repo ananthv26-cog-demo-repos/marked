@@ -789,15 +789,19 @@ marked.use(footnote());
 marked.parse('A reference[^1].\n\n[^1]: A footnote.');
 ```
 
+Footnotes require the block parsing path (`parse`); `parseInline` intentionally leaves footnote syntax unchanged.
+
 | Option | Default | Description |
 | --- | --- | --- |
 | `prefix` | `footnote-` | Prefix used for footnote and reference element IDs |
 | `backRefLabel` | `↩` | Label used by links back to references |
+| `label` | `Footnotes` | Text for the visually hidden section heading |
 
 Definitions that are never referenced are omitted, while unmatched references remain literal text. The example above produces a superscript reference and a section such as:
 
 ```html
 <section class="footnotes" data-footnotes>
+<h2 id="footnote-label" class="sr-only">Footnotes</h2>
 <ol>
 <li id="footnote-1">
 <p>A footnote.<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>
@@ -805,3 +809,5 @@ Definitions that are never referenced are omitted, while unmatched references re
 </ol>
 </section>
 ```
+
+This extension deliberately uses numeric `{prefix}{n}` and `{prefix}ref-{n}` IDs rather than cmark's label-derived IDs, and does not add a `user-content-` clobber prefix. It also omits `class="footnote-ref"` on `<sup>` and `data-footnote-backref-idx` on backrefs. Footnote definitions may interrupt a paragraph.

@@ -7,8 +7,7 @@ const render = (source, options) => new Marked(footnote(options)).parse(source);
 describe('Footnotes extension', () => {
   it('renders references and a footnotes section', () => {
     const html = render('Text[^1].\n\n[^1]: A note.');
-    assert.match(html, /Text<sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1<\/a><\/sup>\./);
-    assert.match(html, /<section class="footnotes" data-footnotes>\n<ol>\n<li id="footnote-1">\n<p>A note\.<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩<\/a><\/p>/);
+    assert.strictEqual(html, '<p>Text<sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup>.</p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>A note.<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n</ol>\n</section>\n');
   });
 
   it('numbers by first reference, supports repeats, and folds labels', () => {
@@ -68,22 +67,50 @@ describe('Footnotes extension', () => {
     const html = render('# Heading [^two]\n\n*em [^one]*\n\n[^one]: One\n[^two]: Two');
     assert.match(html, /<h1>Heading .*footnote-ref-1/);
     assert.match(html, /<em>em .*footnote-ref-2/);
-    assert.strictEqual(html.slice(html.indexOf('<section class="footnotes"')), '<section class="footnotes" data-footnotes>\n<ol>\n<li id="footnote-1">\n<p>Two<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n<li id="footnote-2">\n<p>One<a href="#footnote-ref-2" data-footnote-backref aria-label="Back to reference 2">↩</a></p>\n</li>\n</ol>\n</section>\n');
+    assert.strictEqual(html.slice(html.indexOf('<section class="footnotes"')), '<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>Two<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n<li id="footnote-2">\n<p>One<a href="#footnote-ref-2" data-footnote-backref aria-label="Back to reference 2">↩</a></p>\n</li>\n</ol>\n</section>\n');
   });
 
   it('supports nested, table-cell, and link-text references', () => {
-    const html = render('[^a]\n\n| Note |\n| --- |\n| [^b] |\n\n[link [^c]](/url)\n\n[^a]: see [^b]\n[^b]: B\n[^c]: C');
+    const html = render('[^a]\n\n| Note |\n| --- |\n| [^b] |\n\n[link [^c]](/url) ![alt [^c]](/image)\n\n[^a]: see [^b]\n[^b]: B\n[^c]: C');
     assert.match(html, /see <sup><a href="#footnote-2"/);
     assert.match(html, /<td><sup><a href="#footnote-2"/);
-    assert.match(html, /<a href="\/url">link <sup><a href="#footnote-3"/);
+    assert.match(html, /<a href="\/url">link \[\^c\]<\/a>/);
+    assert.match(html, /alt="alt \[\^c\]"/);
+    assert.ok(!html.includes('<li id="footnote-3">'));
+  });
+
+  it('keeps footnotes out of parseInline', () => {
+    const marked = new Marked(footnote());
+    assert.strictEqual(marked.parseInline('text[^a]'), 'text[^a]');
+  });
+
+  it('does not change documents without footnotes', () => {
+    const source = [
+      '`[^c]`',
+      '\\[^d]',
+      'A[^a] B[^b]',
+      '',
+      '[^a] more',
+    ].join('\n');
+    assert.strictEqual(render(source), new Marked().parse(source));
+  });
+
+  it('includes only definitions reachable from document references', () => {
+    const html = render('[^a]\n\n[^a]: A contains [^b]\n\n[^b]: B\n\n[^c]: C');
+    assert.match(html, /A contains <sup><a href="#footnote-2"/);
     assert.ok(html.includes('<li id="footnote-1">'));
     assert.ok(html.includes('<li id="footnote-2">'));
-    assert.ok(html.includes('<li id="footnote-3">'));
+    assert.ok(!html.includes('>C<a'));
   });
 
   it('does not parse references in code spans', () => {
     const html = render('`[^1]`\n\n[^1]: note');
     assert.strictEqual(html, '<p><code>[^1]</code></p>\n');
+  });
+
+  it('masks references while parsing emphasis', () => {
+    assert.strictEqual(render('*a[^x*y]b*'), '<p><em>a[^x*y]b</em></p>\n');
+    assert.strictEqual(render('_foo[^a_b]bar_'), '<p><em>foo[^a_b]bar</em></p>\n');
   });
 
   it('supports async parsing', async() => {
@@ -92,6 +119,19 @@ describe('Footnotes extension', () => {
     const marked = new Marked({ async: true });
     marked.use(footnote());
     assert.strictEqual(await marked.parse(source), sync);
+  });
+
+  it('isolates concurrent async parses', async() => {
+    const marked = new Marked({ async: true });
+    marked.use(footnote());
+    const [a, b] = await Promise.all([
+      marked.parse('A[^a]\n\n[^a]: A note'),
+      marked.parse('B[^b]\n\n[^b]: B note'),
+    ]);
+    assert.match(a, /A<sup><a href="#footnote-1"/);
+    assert.doesNotMatch(a, /B note|footnote-2/);
+    assert.match(b, /B<sup><a href="#footnote-1"/);
+    assert.doesNotMatch(b, /A note|footnote-2/);
   });
 
   it('drops the section when there are no references and preserves ordinary markdown', () => {
@@ -109,16 +149,38 @@ describe('Footnotes extension', () => {
 
   it('exposes token fields and visits extension tokens', () => {
     const marked = new Marked(footnote());
-    const tokens = marked.lexer('A[^a]\n\n[^a]: note');
     const types = [];
-    marked.walkTokens(tokens, token => types.push(token.type));
-    const ref = tokens[0].tokens.find(token => token.type === 'footnoteRef');
-    const definition = tokens.find(token => token.type === 'footnoteDefinition');
+    let ref;
+    let definition;
+    marked.parse('A[^a]\n\n[^a]: note', {
+      walkTokens(token) {
+        types.push(token.type);
+        if (token.type === 'footnoteRef') {
+          ref = token;
+        }
+        if (token.type === 'footnoteDefinition') {
+          definition = token;
+        }
+      },
+    });
     assert.deepStrictEqual({ raw: ref.raw, label: ref.label, index: ref.index, refIndex: ref.refIndex }, {
       raw: '[^a]', label: 'a', index: 1, refIndex: 1,
     });
     assert.strictEqual(definition.label, 'a');
     assert.ok(types.includes('footnoteRef'));
     assert.ok(types.includes('footnoteDefinition'));
+  });
+
+  it('walks footnote content tokens exactly once', () => {
+    const marked = new Marked(footnote());
+    let contentVisits = 0;
+    marked.parse('A[^a]\n\n[^a]: content', {
+      walkTokens(token) {
+        if (token.type === 'text' && token.raw === 'content') {
+          contentVisits++;
+        }
+      },
+    });
+    assert.strictEqual(contentVisits, 1);
   });
 });
