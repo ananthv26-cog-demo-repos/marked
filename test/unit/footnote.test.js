@@ -45,11 +45,53 @@ describe('Footnotes extension', () => {
     assert.match(html, /<pre><code>block\n<\/code><\/pre>/);
   });
 
+  it('stops lazy continuation before new block constructs', () => {
+    const blocks = [
+      ['# Heading', '<h1>Heading</h1>'],
+      ['```js\ncode\n```', '<pre><code class="language-js">code\n</code></pre>'],
+      ['~~~\ncode\n~~~', '<pre><code>code\n</code></pre>'],
+      ['> quote', '<blockquote>\n<p>quote</p>\n</blockquote>'],
+      ['- item', '<ul>\n<li>item</li>\n</ul>'],
+      ['1. item', '<ol>\n<li>item</li>\n</ol>'],
+      ['***', '<hr>'],
+      ['<div>html</div>', '<div>html</div>'],
+    ];
+    for (const [block, expected] of blocks) {
+      const html = render(`Ref[^x]\n\n[^x]: note\n\n${block}`);
+      assert.ok(html.includes(expected), block);
+      const footnotes = html.slice(html.indexOf('<section class="footnotes"'));
+      assert.ok(!footnotes.includes(expected), block);
+    }
+  });
+
   it('supports consecutive definitions and references in emphasis and headings', () => {
     const html = render('# Heading [^two]\n\n*em [^one]*\n\n[^one]: One\n[^two]: Two');
     assert.match(html, /<h1>Heading .*footnote-ref-1/);
     assert.match(html, /<em>em .*footnote-ref-2/);
-    assert.match(html, /One|Two/);
+    assert.strictEqual(html.slice(html.indexOf('<section class="footnotes"')), '<section class="footnotes" data-footnotes>\n<ol>\n<li id="footnote-1">\n<p>Two<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n<li id="footnote-2">\n<p>One<a href="#footnote-ref-2" data-footnote-backref aria-label="Back to reference 2">↩</a></p>\n</li>\n</ol>\n</section>\n');
+  });
+
+  it('supports nested, table-cell, and link-text references', () => {
+    const html = render('[^a]\n\n| Note |\n| --- |\n| [^b] |\n\n[link [^c]](/url)\n\n[^a]: see [^b]\n[^b]: B\n[^c]: C');
+    assert.match(html, /see <sup><a href="#footnote-2"/);
+    assert.match(html, /<td><sup><a href="#footnote-2"/);
+    assert.match(html, /<a href="\/url">link <sup><a href="#footnote-3"/);
+    assert.ok(html.includes('<li id="footnote-1">'));
+    assert.ok(html.includes('<li id="footnote-2">'));
+    assert.ok(html.includes('<li id="footnote-3">'));
+  });
+
+  it('does not parse references in code spans', () => {
+    const html = render('`[^1]`\n\n[^1]: note');
+    assert.strictEqual(html, '<p><code>[^1]</code></p>\n');
+  });
+
+  it('supports async parsing', async() => {
+    const source = 'Text[^1].\n\n[^1]: note';
+    const sync = render(source);
+    const marked = new Marked({ async: true });
+    marked.use(footnote());
+    assert.strictEqual(await marked.parse(source), sync);
   });
 
   it('drops the section when there are no references and preserves ordinary markdown', () => {

@@ -6,6 +6,33 @@ export interface FootnoteOptions {
   backRefLabel?: string;
 }
 
+const blockHtmlTags = 'address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|ol|p|pre|script|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul';
+const blockStartPattern = new RegExp(`^ {0,3}(?:#{1,6}(?:[ \\t]|$)|(?:\`\`\`|~~~)|>[ \\t]?|(?:[*+-]|\\d+[.)])[ \\t]+|<!--|</?(?:${blockHtmlTags})(?:[ \\t/>]|$))`);
+
+function isThematicBreak(line: string) {
+  const trimmed = line.trim();
+  if (trimmed.length < 3) {
+    return false;
+  }
+  const marker = trimmed[0];
+  if (marker !== '*' && marker !== '-' && marker !== '_') {
+    return false;
+  }
+  let count = 0;
+  for (const character of trimmed) {
+    if (character === marker) {
+      count++;
+    } else if (character !== ' ' && character !== '\t') {
+      return false;
+    }
+  }
+  return count >= 3;
+}
+
+function isBlockConstruct(line: string) {
+  return blockStartPattern.test(line) || isThematicBreak(line);
+}
+
 /**
  * Adds GFM-style footnote references and definitions.
  *
@@ -14,7 +41,7 @@ export interface FootnoteOptions {
 export function footnote(options: FootnoteOptions = {}): MarkedExtension {
   const prefix = options.prefix ?? 'footnote-';
   const backRefLabel = options.backRefLabel ?? '↩';
-  const definitions = new Map<string, { token: Tokens.Generic, referenced: boolean }>();
+  const definitions = new Map<string, { token: Tokens.Generic }>();
   const references = new Map<string, { index: number, refCount: number, token: Tokens.Generic }>();
   let nextIndex = 1;
 
@@ -62,6 +89,9 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             if (isDefinition && !isIndented) {
               break;
             }
+            if (!isIndented && isBlockConstruct(line)) {
+              break;
+            }
             if (isIndented) {
               consumed.push(line.replace(/^(?: {4}|\t)/, ''));
             } else {
@@ -82,7 +112,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             tokens: this.lexer.blockTokens(contentLines.join('\n')),
           };
           if (!definitions.has(key)) {
-            definitions.set(key, { token, referenced: false });
+            definitions.set(key, { token });
           }
           return token;
         },
@@ -117,7 +147,6 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             references.set(key, reference);
           }
           reference.refCount++;
-          definition.referenced = true;
           return {
             type: 'footnoteRef',
             raw: match[0],
