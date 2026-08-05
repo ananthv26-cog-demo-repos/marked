@@ -89,6 +89,12 @@ describe('Footnotes extension', () => {
     assert.ok(!html.includes('<li id="footnote-3">'));
   });
 
+  it('keeps list items tight when definitions appear inside list items', () => {
+    const html = render('- item[^a]\n  [^a]: first\n\n      second\n- after');
+    assert.match(html, /<li>after<\/li>/);
+    assert.match(html, /<p>first<\/p>\n<p>second<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩<\/a><\/p>/);
+  });
+
   it('drops unreachable refs in duplicate definitions with nested content', () => {
     const html = render('[^a]\n\n[^a]: first has [^b]\n\n[^a]: dup has [^c]\n\n[^b]: B\n\n[^c]: C');
     assert.strictEqual(html, '<p><sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup></p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>first has <sup><a href="#footnote-2" id="footnote-ref-2" data-footnote-ref aria-describedby="footnote-label">2</a></sup><a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n<li id="footnote-2">\n<p>B<a href="#footnote-ref-2" data-footnote-backref aria-label="Back to reference 2">↩</a></p>\n</li>\n</ol>\n</section>\n');
@@ -165,8 +171,8 @@ describe('Footnotes extension', () => {
 
   it('falls back to literal references for manual lexer-parser usage', () => {
     const marked = new Marked(footnote());
-    const tokens = marked.lexer('A[^a]\n\n[^a]: note');
-    assert.strictEqual(marked.parser(tokens), '<p>A[^a]</p>\n');
+    const tokens = marked.lexer('A[^<img src=x onerror=alert(1)>]\n\n[^<img src=x onerror=alert(1)>]: note');
+    assert.strictEqual(marked.parser(tokens), '<p>A[^&lt;img src=x onerror=alert(1)&gt;]</p>\n');
   });
 
   it('escapes option values in rendered output', () => {

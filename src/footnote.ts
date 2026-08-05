@@ -72,7 +72,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
   const collectFootnoteRefs = (
     tokens: TokensList | Tokens.Generic[] | Tokens.TableCell[] | Tokens.ListItem[],
     stack: Tokens.Generic[],
-    refs: { token: Tokens.Generic; context?: Tokens.Generic; key: string }[],
+    refs: { token: Tokens.Generic; context?: Tokens.Generic; key: string; sequence: number }[],
   ) => {
     for (const token of tokens as Tokens.Generic[]) {
       if (token.type === 'footnoteDefinition') {
@@ -84,7 +84,8 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         continue;
       }
       if (token.type === 'footnoteRef') {
-        refs.push({ token, context: stack.at(-1), key: normalizeLabel(token.label) });
+        const sequence = (token as Tokens.Generic & { sequence?: number }).sequence ?? 0;
+        refs.push({ token, context: stack.at(-1), key: normalizeLabel(token.label), sequence });
       }
       if (token.type === 'list') {
         for (const item of token.items) {
@@ -168,7 +169,14 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           const label = match[1];
           const key = normalizeLabel(label);
           const state = getState(this.lexer.tokens);
-          const definitionTokens = this.lexer.blockTokens(contentLines.join('\n'));
+          const top = this.lexer.state.top;
+          this.lexer.state.top = true;
+          let definitionTokens!: TokensList;
+          try {
+            definitionTokens = this.lexer.blockTokens(contentLines.join('\n')) as TokensList;
+          } finally {
+            this.lexer.state.top = top;
+          }
           const token: Tokens.Generic = {
             type: 'footnoteDefinition',
             raw,
@@ -217,7 +225,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         name: 'footnoteRef',
         renderer(token) {
           if (token.index === undefined) {
-            return token.raw;
+            return escape(token.raw);
           }
           const suffix = token.refIndex > 1 ? `-${token.refIndex}` : '';
           const idPrefix = escape(prefix, true);
