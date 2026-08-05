@@ -53,9 +53,9 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
 
   const normalizeLabel = (label: string) => label.toLowerCase().replace(/\s+/g, ' ');
   const labelPattern = '[^\\[\\]\\n]+';
-  const definitionPattern = new RegExp(`^ {0,3}\\[\\^(${labelPattern})\\]:`);
+  const definitionPattern = new RegExp(`^ {0,3}\\[\\^(${labelPattern})\\]:(?=[ \\t]|$)`);
   const referencePattern = new RegExp(`^\\[\\^(${labelPattern})\\]`);
-  const definitionStartPattern = new RegExp(`\\n {0,3}\\[\\^${labelPattern}\\]:`);
+  const definitionStartPattern = new RegExp(`\\n {0,3}\\[\\^${labelPattern}\\]:(?=[ \\t]|$)`);
 
   const getState = (tokens: TokensList) => {
     let state = states.get(tokens);
@@ -73,39 +73,51 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
     tokens: TokensList | Tokens.Generic[] | Tokens.TableCell[] | Tokens.ListItem[],
     stack: Tokens.Generic[],
     refs: { token: Tokens.Generic; context?: Tokens.Generic; key: string; sequence: number }[],
+    definitions: Map<string, Tokens.Generic>,
+    inLink = false,
   ) => {
     for (const token of tokens as Tokens.Generic[]) {
       if (token.type === 'footnoteDefinition') {
+        const key = normalizeLabel(token.label);
+        if (!definitions.has(key)) {
+          definitions.set(key, token);
+        }
         stack.push(token);
         if (token.tokens) {
-          collectFootnoteRefs(token.tokens as TokensList, stack, refs);
+          collectFootnoteRefs(token.tokens as TokensList, stack, refs, definitions, inLink);
         }
         stack.pop();
         continue;
       }
-      if (token.type === 'footnoteRef') {
+      if (token.type === 'footnoteRef' && !inLink) {
         const sequence = (token as Tokens.Generic & { sequence?: number }).sequence ?? 0;
         refs.push({ token, context: stack.at(-1), key: normalizeLabel(token.label), sequence });
       }
       if (token.type === 'list') {
         for (const item of token.items) {
-          collectFootnoteRefs(item.tokens, stack, refs);
+          collectFootnoteRefs(item.tokens, stack, refs, definitions, inLink);
         }
         continue;
       }
       if (token.type === 'table') {
         for (const cell of token.header) {
-          collectFootnoteRefs(cell.tokens, stack, refs);
+          collectFootnoteRefs(cell.tokens, stack, refs, definitions, inLink);
         }
         for (const row of token.rows) {
           for (const cell of row) {
-            collectFootnoteRefs(cell.tokens, stack, refs);
+            collectFootnoteRefs(cell.tokens, stack, refs, definitions, inLink);
           }
         }
         continue;
       }
+      if (token.type === 'link') {
+        if (token.tokens) {
+          collectFootnoteRefs(token.tokens as TokensList, stack, refs, definitions, true);
+        }
+        continue;
+      }
       if (token.tokens) {
-        collectFootnoteRefs(token.tokens as TokensList, stack, refs);
+        collectFootnoteRefs(token.tokens as TokensList, stack, refs, definitions, inLink);
       }
     }
   };
@@ -136,7 +148,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             const line = lines[lineIndex];
             const isBlank = line.trim() === '';
             const isIndented = /^(?: {4}|\t)/.test(line);
-            const isDefinition = /^ {0,3}\[\^[^\[\]\n]+]:/.test(line);
+            const isDefinition = /^ {0,3}\[\^[^\[\]\n]+]:(?=[ \t]|$)/.test(line);
 
             if (isBlank) {
               let nextIndex = lineIndex + 1;
@@ -271,16 +283,16 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         if (this.block === false) {
           return tokens;
         }
-        const state = getState(tokens as TokensList);
+        const definitions = new Map<string, Tokens.Generic>();
         const collectedRefs: { token: Tokens.Generic; context?: Tokens.Generic; key: string; sequence: number }[] = [];
-        collectFootnoteRefs(tokens as TokensList, [], collectedRefs);
+        collectFootnoteRefs(tokens as TokensList, [], collectedRefs, definitions);
         const reachable = new Set<Tokens.Generic>();
         const pending = collectedRefs
           .filter(reference => reference.context === undefined)
           .map(reference => reference.key);
         while (pending.length > 0) {
           const key = pending.shift()!;
-          const definition = state.definitions.get(key)?.token;
+          const definition = definitions.get(key);
           if (!definition || reachable.has(definition)) {
             continue;
           }
@@ -293,7 +305,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         }
         const ordered = collectedRefs
           .filter(reference => (reference.context === undefined || reachable.has(reference.context))
-            && state.definitions.has(reference.key))
+            && definitions.has(reference.key))
           .sort((a, b) => a.sequence - b.sequence);
         const footnotes = new Map<string, { index: number, refCount: number, token: Tokens.Generic }>();
         let nextIndex = 1;
@@ -304,7 +316,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             item = {
               index: nextIndex++,
               refCount: 0,
-              token: state.definitions.get(key)!.token,
+              token: definitions.get(key)!,
             };
             footnotes.set(key, item);
           }

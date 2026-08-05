@@ -810,4 +810,4 @@ Definitions that are never referenced are omitted, while unmatched references re
 </section>
 ```
 
-This extension deliberately uses numeric `{prefix}{n}` and `{prefix}ref-{n}` IDs rather than cmark's label-derived IDs, and does not add a `user-content-` clobber prefix. It also omits `class="footnote-ref"` on `<sup>` and `data-footnote-backref-idx` on backrefs. Footnote definitions may interrupt a paragraph.
+This extension deliberately uses numeric `{prefix}{n}` and `{prefix}ref-{n}` IDs rather than cmark's label-derived IDs, and does not add a `user-content-` clobber prefix. It also omits `class="footnote-ref"` on `<sup>` and `data-footnote-backref-idx` on backrefs. Footnote definitions may interrupt a paragraph. References inside a definition's own content are numbered in lex order, so a nested reference can receive a lower number than a later main-text reference, unlike cmark-gfm's main-text-first ordering. A definition inside a blockquote or list item leaves an empty container in the document flow while its note is hoisted to the footnotes section.

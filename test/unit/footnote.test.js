@@ -89,6 +89,13 @@ describe('Footnotes extension', () => {
     assert.ok(!html.includes('<li id="footnote-3">'));
   });
 
+  it('keeps refs inside image-containing link text literal', () => {
+    const html = render('[![i](/i) [^a]](/url)\n\n[^a]: note');
+    assert.match(html, /<a href="\/url"><img src="\/i" alt="i"> \[\^a\]<\/a>/);
+    assert.doesNotMatch(html, /<sup><a href="#footnote-/);
+    assert.doesNotMatch(html, /<section class="footnotes"/);
+  });
+
   it('keeps list items tight when definitions appear inside list items', () => {
     const html = render('- item[^a]\n  [^a]: first\n\n      second\n- after');
     assert.match(html, /<li>after<\/li>/);
@@ -115,7 +122,7 @@ describe('Footnotes extension', () => {
         },
       },
     });
-    assert.doesNotThrow(() => marked.parse('A[^a]\n\n[^a]: note'));
+    assert.strictEqual(marked.parse('A[^a]\n\n[^a]: note'), '<p>A<sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup></p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>note<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n</ol>\n</section>\n');
   });
 
   it('does not change documents without footnotes', () => {
@@ -149,6 +156,11 @@ describe('Footnotes extension', () => {
     const html = render('A[^a]\n\n[^a]: first\n\n\n    second');
     assert.match(html, /<p>first<\/p>\n<p>second<a href="#footnote-ref-1"/);
     assert.doesNotMatch(html, /<pre><code>second/);
+  });
+
+  it('requires whitespace after the definition marker colon', () => {
+    assert.strictEqual(render('A[^a]:note'), '<p>A[^a]:note</p>\n');
+    assert.match(render('A[^a]\n\n[^a]:'), /<li id="footnote-1">\n<p><a href="#footnote-ref-1"/);
   });
 
   it('includes only definitions reachable from document references', () => {
