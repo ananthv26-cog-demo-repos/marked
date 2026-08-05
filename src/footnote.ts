@@ -1,5 +1,6 @@
 import type { MarkedExtension } from './MarkedOptions.ts';
-import type { Token, Tokens, TokensList } from './Tokens.ts';
+import type { Tokens, TokensList } from './Tokens.ts';
+import { escapeHtmlEntities as escape } from './helpers.ts';
 
 export interface FootnoteOptions {
   prefix?: string;
@@ -36,13 +37,6 @@ function isBlockConstruct(line: string) {
 
 interface FootnoteState {
   definitions: Map<string, { token: Tokens.Generic }>;
-  references: {
-    token: Tokens.Generic;
-    label: string;
-    context?: string;
-    sequence: number;
-  }[];
-  tokenContexts: Map<Token[], string | undefined>;
   sequence: number;
 }
 
@@ -68,8 +62,6 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
     if (!state) {
       state = {
         definitions: new Map(),
-        references: [],
-        tokenContexts: new Map(),
         sequence: 0,
       };
       states.set(tokens, state);
@@ -77,28 +69,42 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
     return state;
   };
 
-  const registerTokenArrays = (tokens: Token[], context: string, state: FootnoteState) => {
-    if (!state.tokenContexts.has(tokens)) {
-      state.tokenContexts.set(tokens, context);
-    }
-    for (const token of tokens) {
-      const generic = token as Tokens.Generic;
-      if (generic.tokens) {
-        registerTokenArrays(generic.tokens, state.tokenContexts.get(generic.tokens) ?? context, state);
-      }
-      if (generic.type === 'list') {
-        registerTokenArrays(generic.items, state.tokenContexts.get(generic.items) ?? context, state);
-      }
-      if (generic.type === 'table') {
-        const table = generic as Tokens.Table;
-        for (const cell of table.header) {
-          registerTokenArrays(cell.tokens, context, state);
+  const collectFootnoteRefs = (
+    tokens: TokensList | Tokens.Generic[] | Tokens.TableCell[] | Tokens.ListItem[],
+    stack: Tokens.Generic[],
+    refs: { token: Tokens.Generic; context?: Tokens.Generic; key: string }[],
+  ) => {
+    for (const token of tokens as Tokens.Generic[]) {
+      if (token.type === 'footnoteDefinition') {
+        stack.push(token);
+        if (token.tokens) {
+          collectFootnoteRefs(token.tokens as TokensList, stack, refs);
         }
-        for (const row of table.rows) {
+        stack.pop();
+        continue;
+      }
+      if (token.type === 'footnoteRef') {
+        refs.push({ token, context: stack.at(-1), key: normalizeLabel(token.label) });
+      }
+      if (token.type === 'list') {
+        for (const item of token.items) {
+          collectFootnoteRefs(item.tokens, stack, refs);
+        }
+        continue;
+      }
+      if (token.type === 'table') {
+        for (const cell of token.header) {
+          collectFootnoteRefs(cell.tokens, stack, refs);
+        }
+        for (const row of token.rows) {
           for (const cell of row) {
-            registerTokenArrays(cell.tokens, context, state);
+            collectFootnoteRefs(cell.tokens, stack, refs);
           }
         }
+        continue;
+      }
+      if (token.tokens) {
+        collectFootnoteRefs(token.tokens as TokensList, stack, refs);
       }
     }
   };
@@ -122,7 +128,8 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           }
 
           const lines = src.split('\n');
-          const consumed = [lines[0]];
+          const rawLines = [lines[0]];
+          const contentLines = [lines[0]];
           let lineIndex = 1;
           while (lineIndex < lines.length) {
             const line = lines[lineIndex];
@@ -135,7 +142,8 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
               if (next === undefined || !/^(?: {4}|\t)/.test(next)) {
                 break;
               }
-              consumed.push(line);
+              rawLines.push(line);
+              contentLines.push(line);
               lineIndex++;
               continue;
             }
@@ -146,15 +154,16 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
               break;
             }
             if (isIndented) {
-              consumed.push(line.replace(/^(?: {4}|\t)/, ''));
+              rawLines.push(line);
+              contentLines.push(line.replace(/^(?: {4}|\t)/, ''));
             } else {
-              consumed.push(line);
+              rawLines.push(line);
+              contentLines.push(line);
             }
             lineIndex++;
           }
 
-          const raw = consumed.join('\n');
-          const contentLines = consumed.slice();
+          const raw = rawLines.join('\n');
           contentLines[0] = contentLines[0].slice(match[0].length).replace(/^ ?/, '');
           const label = match[1];
           const key = normalizeLabel(label);
@@ -169,7 +178,6 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           if (!state.definitions.has(key)) {
             state.definitions.set(key, { token });
           }
-          registerTokenArrays(definitionTokens, key, state);
           return token;
         },
         renderer() {
@@ -200,13 +208,8 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             type: 'footnoteRef',
             raw: match[0],
             label: match[1],
-          };
-          state.references.push({
-            token,
-            label: key,
-            context: state.tokenContexts.get(tokens),
             sequence: state.sequence++,
-          });
+          };
           return token;
         },
       },
@@ -217,27 +220,31 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             return token.raw;
           }
           const suffix = token.refIndex > 1 ? `-${token.refIndex}` : '';
-          return `<sup><a href="#${prefix}${token.index}" id="${prefix}ref-${token.index}${suffix}" data-footnote-ref aria-describedby="footnote-label">${token.index}</a></sup>`;
+          const idPrefix = escape(prefix, true);
+          const labelId = `${idPrefix}label`;
+          return `<sup><a href="#${idPrefix}${token.index}" id="${idPrefix}ref-${token.index}${suffix}" data-footnote-ref aria-describedby="${labelId}">${token.index}</a></sup>`;
         },
       },
       {
         name: 'footnotes',
         renderer(token) {
-          let output = `<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">${headingLabel}</h2>\n<ol>\n`;
+          const idPrefix = escape(prefix, true);
+          const labelId = `${idPrefix}label`;
+          let output = `<section class="footnotes" data-footnotes>\n<h2 id="${labelId}" class="sr-only">${escape(headingLabel)}</h2>\n<ol>\n`;
           for (const item of token.items) {
             let content = this.parser.parse(item.tokens);
             const backrefs = Array.from({ length: item.refCount }, (_, i) => {
               const refIndex = i + 1;
               const suffix = refIndex > 1 ? `-${refIndex}` : '';
               const label = `${item.index}${suffix}`;
-              return `<a href="#${prefix}ref-${label}" data-footnote-backref aria-label="Back to reference ${label}">${backRefLabel}${refIndex > 1 ? `<sup>${refIndex}</sup>` : ''}</a>`;
+              return `<a href="#${idPrefix}ref-${label}" data-footnote-backref aria-label="${escape(`Back to reference ${label}`)}">${escape(backRefLabel)}${refIndex > 1 ? `<sup>${refIndex}</sup>` : ''}</a>`;
             }).join(' ');
             if (content.endsWith('</p>\n')) {
               content = content.slice(0, -5) + backrefs + '</p>\n';
             } else {
               content += `<p>${backrefs}</p>\n`;
             }
-            output += `<li id="${prefix}${item.index}">\n${content}</li>\n`;
+            output += `<li id="${idPrefix}${item.index}">\n${content}</li>\n`;
           }
           return output + '</ol>\n</section>\n';
         },
@@ -252,67 +259,48 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           return tokens;
         }
         const state = getState(tokens as TokensList);
-        const reachable = new Set<string>();
-        const pending = state.references
+        const collectedRefs: { token: Tokens.Generic; context?: Tokens.Generic; key: string; sequence: number }[] = [];
+        collectFootnoteRefs(tokens as TokensList, [], collectedRefs);
+        const reachable = new Set<Tokens.Generic>();
+        const pending = collectedRefs
           .filter(reference => reference.context === undefined)
-          .map(reference => reference.label);
+          .map(reference => reference.key);
         while (pending.length > 0) {
           const key = pending.shift()!;
-          if (reachable.has(key) || !state.definitions.has(key)) {
+          const definition = state.definitions.get(key)?.token;
+          if (!definition || reachable.has(definition)) {
             continue;
           }
-          reachable.add(key);
-          state.references.forEach(reference => {
-            if (reference.context === key) {
-              pending.push(reference.label);
+          reachable.add(definition);
+          for (const reference of collectedRefs) {
+            if (reference.context === definition) {
+              pending.push(reference.key);
             }
-          });
+          }
         }
-        const ordered: FootnoteState['references'] = [];
-        const included = new Set<string>();
-        const visitedDefinitions = new Set<string>();
-        const documentReferences = state.references
-          .filter(reference => reference.context === undefined && reachable.has(reference.label))
+        const ordered = collectedRefs
+          .filter(reference => reference.context === undefined || reachable.has(reference.context))
           .sort((a, b) => a.sequence - b.sequence);
-        ordered.push(...documentReferences);
-        documentReferences.forEach(reference => included.add(reference.label));
-        const visitDefinition = (key: string) => {
-          if (visitedDefinitions.has(key)) {
-            return;
-          }
-          visitedDefinitions.add(key);
-          for (const reference of state.references
-            .filter(reference => reference.context === key && reachable.has(reference.label))
-            .sort((a, b) => a.sequence - b.sequence)) {
-            ordered.push(reference);
-            if (!included.has(reference.label)) {
-              included.add(reference.label);
-              visitDefinition(reference.label);
-            }
-          }
-        };
-        for (const key of new Set(documentReferences.map(reference => reference.label))) {
-          visitDefinition(key);
-        }
-        const references = new Map<string, { index: number, refCount: number, token: Tokens.Generic }>();
+        const footnotes = new Map<string, { index: number, refCount: number, token: Tokens.Generic }>();
         let nextIndex = 1;
         for (const reference of ordered) {
-          let item = references.get(reference.label);
+          const key = reference.key;
+          let item = footnotes.get(key);
           if (!item) {
             item = {
               index: nextIndex++,
               refCount: 0,
-              token: state.definitions.get(reference.label)!.token,
+              token: state.definitions.get(key)!.token,
             };
-            references.set(reference.label, item);
+            footnotes.set(key, item);
           }
           item.refCount++;
           reference.token.index = item.index;
           reference.token.refIndex = item.refCount;
         }
-        if (references.size > 0) {
+        if (footnotes.size > 0) {
           // Definition tokens are already walked in place; childTokens would visit them twice.
-          const items = Array.from(references.values())
+          const items = Array.from(footnotes.values())
             .sort((a, b) => a.index - b.index)
             .map((reference) => ({
               ...reference.token,

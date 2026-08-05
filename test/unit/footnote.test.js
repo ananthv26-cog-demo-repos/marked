@@ -44,6 +44,16 @@ describe('Footnotes extension', () => {
     assert.match(html, /<pre><code>block\n<\/code><\/pre>/);
   });
 
+  it('renders an indented multi-block definition without leaking raw source', () => {
+    const html = render('Ref[^z]\n\n[^z]: code\n\n        block');
+    assert.strictEqual(html, '<p>Ref<sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup></p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>code</p>\n<pre><code>block\n</code></pre>\n<p><a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n</ol>\n</section>\n');
+  });
+
+  it('renders a definition followed by a top-level paragraph', () => {
+    const html = render('Ref[^x]\n\n[^x]: note\n\nParagraph.');
+    assert.strictEqual(html, '<p>Ref<sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup></p>\n<p>Paragraph.</p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>note<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n</ol>\n</section>\n');
+  });
+
   it('stops lazy continuation before new block constructs', () => {
     const blocks = [
       ['# Heading', '<h1>Heading</h1>'],
@@ -77,6 +87,11 @@ describe('Footnotes extension', () => {
     assert.match(html, /<a href="\/url">link \[\^c\]<\/a>/);
     assert.match(html, /alt="alt \[\^c\]"/);
     assert.ok(!html.includes('<li id="footnote-3">'));
+  });
+
+  it('drops unreachable refs in duplicate definitions with nested content', () => {
+    const html = render('[^a]\n\n[^a]: first has [^b]\n\n[^a]: dup has [^c]\n\n[^b]: B\n\n[^c]: C');
+    assert.strictEqual(html, '<p><sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup></p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>first has <sup><a href="#footnote-2" id="footnote-ref-2" data-footnote-ref aria-describedby="footnote-label">2</a></sup><a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n<li id="footnote-2">\n<p>B<a href="#footnote-ref-2" data-footnote-backref aria-label="Back to reference 2">↩</a></p>\n</li>\n</ol>\n</section>\n');
   });
 
   it('keeps footnotes out of parseInline', () => {
@@ -141,16 +156,22 @@ describe('Footnotes extension', () => {
 
   it('resets state between parses and supports custom prefixes', () => {
     const marked = new Marked(footnote({ prefix: 'fn-', backRefLabel: 'back' }));
-    assert.match(marked.parse('A[^a]\n\n[^a]: note'), /#fn-1|#fn-ref-1/);
+    const html = marked.parse('A[^a]\n\n[^a]: note');
+    assert.strictEqual(html, '<p>A<sup><a href="#fn-1" id="fn-ref-1" data-footnote-ref aria-describedby="fn-label">1</a></sup></p>\n<section class="footnotes" data-footnotes>\n<h2 id="fn-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="fn-1">\n<p>note<a href="#fn-ref-1" data-footnote-backref aria-label="Back to reference 1">back</a></p>\n</li>\n</ol>\n</section>\n');
     const second = marked.parse('B[^b]\n\n[^b]: note');
     assert.match(second, /id="fn-ref-1"/);
-    assert.match(second, />back<\/a>/);
+    assert.match(second, /aria-describedby="fn-label"/);
   });
 
   it('falls back to literal references for manual lexer-parser usage', () => {
     const marked = new Marked(footnote());
     const tokens = marked.lexer('A[^a]\n\n[^a]: note');
     assert.strictEqual(marked.parser(tokens), '<p>A[^a]</p>\n');
+  });
+
+  it('escapes option values in rendered output', () => {
+    const html = render('A[^a]\n\n[^a]: note', { prefix: 'f"n&', backRefLabel: '<back>', label: 'Foot & Notes' });
+    assert.strictEqual(html, '<p>A<sup><a href="#f&quot;n&amp;1" id="f&quot;n&amp;ref-1" data-footnote-ref aria-describedby="f&quot;n&amp;label">1</a></sup></p>\n<section class="footnotes" data-footnotes>\n<h2 id="f&quot;n&amp;label" class="sr-only">Foot &amp; Notes</h2>\n<ol>\n<li id="f&quot;n&amp;1">\n<p>note<a href="#f&quot;n&amp;ref-1" data-footnote-backref aria-label="Back to reference 1">&lt;back&gt;</a></p>\n</li>\n</ol>\n</section>\n');
   });
 
   it('exposes token fields and visits extension tokens', () => {
