@@ -213,6 +213,9 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
       {
         name: 'footnoteRef',
         renderer(token) {
+          if (token.index === undefined) {
+            return token.raw;
+          }
           const suffix = token.refIndex > 1 ? `-${token.refIndex}` : '';
           return `<sup><a href="#${prefix}${token.index}" id="${prefix}ref-${token.index}${suffix}" data-footnote-ref aria-describedby="footnote-label">${token.index}</a></sup>`;
         },
@@ -241,9 +244,6 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
       },
     ],
     hooks: {
-      preprocess(markdown) {
-        return markdown;
-      },
       emStrongMask(src) {
         return src.replace(/\[\^[^\[\]\n]+\]/g, match => 'a'.repeat(match.length));
       },

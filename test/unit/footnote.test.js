@@ -147,6 +147,12 @@ describe('Footnotes extension', () => {
     assert.match(second, />back<\/a>/);
   });
 
+  it('falls back to literal references for manual lexer-parser usage', () => {
+    const marked = new Marked(footnote());
+    const tokens = marked.lexer('A[^a]\n\n[^a]: note');
+    assert.strictEqual(marked.parser(tokens), '<p>A[^a]</p>\n');
+  });
+
   it('exposes token fields and visits extension tokens', () => {
     const marked = new Marked(footnote());
     const types = [];
