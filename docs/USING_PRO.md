@@ -777,3 +777,31 @@ console.log(html);
 <h1 id="heading">heading</h1>
 <p>  <a href="#heading" title="heading">link</a></p>
 ```
+
+## Footnotes
+
+GFM-style footnotes are available as an opt-in extension:
+
+```js
+import { marked, footnote } from 'marked';
+
+marked.use(footnote());
+marked.parse('A reference[^1].\n\n[^1]: A footnote.');
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `prefix` | `footnote-` | Prefix used for footnote and reference element IDs |
+| `backRefLabel` | `↩` | Label used by links back to references |
+
+Definitions that are never referenced are omitted, while unmatched references remain literal text. The example above produces a superscript reference and a section such as:
+
+```html
+<section class="footnotes" data-footnotes>
+<ol>
+<li id="footnote-1">
+<p>A footnote.<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>
+</li>
+</ol>
+</section>
+```
