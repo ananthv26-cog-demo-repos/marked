@@ -55,7 +55,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
   const labelPattern = '[^\\[\\]\\n]+';
   const definitionPattern = new RegExp(`^ {0,3}\\[\\^(${labelPattern})\\]:`);
   const referencePattern = new RegExp(`^\\[\\^(${labelPattern})\\]`);
-  const definitionStartPattern = new RegExp(`(?:^|\\n) {0,3}\\[\\^${labelPattern}\\]:`);
+  const definitionStartPattern = new RegExp(`\\n {0,3}\\[\\^${labelPattern}\\]:`);
 
   const getState = (tokens: TokensList) => {
     let state = states.get(tokens);
@@ -120,7 +120,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           if (!match) {
             return undefined;
           }
-          return match.index + (match[0][0] === '\n' ? 1 : 0);
+          return match.index + 1;
         },
         tokenizer(src) {
           const match = definitionPattern.exec(src);
@@ -139,13 +139,18 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             const isDefinition = /^ {0,3}\[\^[^\[\]\n]+]:/.test(line);
 
             if (isBlank) {
-              const next = lines[lineIndex + 1];
-              if (next === undefined || !/^(?: {4}|\t)/.test(next)) {
+              let nextIndex = lineIndex + 1;
+              while (nextIndex < lines.length && lines[nextIndex].trim() === '') {
+                nextIndex++;
+              }
+              if (nextIndex === lines.length || !/^(?: {4}|\t)/.test(lines[nextIndex])) {
                 break;
               }
-              rawLines.push(line);
-              contentLines.push(line);
-              lineIndex++;
+              while (lineIndex < nextIndex) {
+                rawLines.push(lines[lineIndex]);
+                contentLines.push(lines[lineIndex]);
+                lineIndex++;
+              }
               continue;
             }
             if (isDefinition && !isIndented) {
@@ -165,7 +170,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           }
 
           const raw = rawLines.join('\n');
-          contentLines[0] = contentLines[0].slice(match[0].length).replace(/^ ?/, '');
+          contentLines[0] = contentLines[0].slice(match[0].length).replace(/^[ \t]+/, '');
           const label = match[1];
           const key = normalizeLabel(label);
           const state = getState(this.lexer.tokens);
@@ -287,7 +292,8 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           }
         }
         const ordered = collectedRefs
-          .filter(reference => reference.context === undefined || reachable.has(reference.context))
+          .filter(reference => (reference.context === undefined || reachable.has(reference.context))
+            && state.definitions.has(reference.key))
           .sort((a, b) => a.sequence - b.sequence);
         const footnotes = new Map<string, { index: number, refCount: number, token: Tokens.Generic }>();
         let nextIndex = 1;

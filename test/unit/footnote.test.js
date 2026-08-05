@@ -105,6 +105,19 @@ describe('Footnotes extension', () => {
     assert.strictEqual(marked.parseInline('text[^a]'), 'text[^a]');
   });
 
+  it('handles another processAllTokens hook returning a fresh array', () => {
+    const marked = new Marked();
+    marked.use(footnote());
+    marked.use({
+      hooks: {
+        processAllTokens(tokens) {
+          return [...tokens];
+        },
+      },
+    });
+    assert.doesNotThrow(() => marked.parse('A[^a]\n\n[^a]: note'));
+  });
+
   it('does not change documents without footnotes', () => {
     const source = [
       '`[^c]`',
@@ -114,6 +127,28 @@ describe('Footnotes extension', () => {
       '[^a] more',
     ].join('\n');
     assert.strictEqual(render(source), new Marked().parse(source));
+  });
+
+  it('does not clip paragraph text that resembles a definition', () => {
+    for (const source of ['a [^b]: c', 'a [^ b]: c']) {
+      assert.strictEqual(render(source), new Marked().parse(source));
+    }
+    const tokens = new Marked(footnote()).lexer('[^a]: note\n\n[^a]');
+    assert.ok(tokens.some(token => token.type === 'footnoteDefinition'));
+  });
+
+  it('strips all whitespace after a definition marker', () => {
+    for (const source of ['A[^a]\n\n[^a]:\tnote', 'A[^a]\n\n[^a]:     note']) {
+      const html = render(source);
+      assert.match(html, /<li id="footnote-1">\n<p>note<a href="#footnote-ref-1"/);
+      assert.doesNotMatch(html, /<pre><code>note/);
+    }
+  });
+
+  it('keeps indented continuation after multiple blank lines', () => {
+    const html = render('A[^a]\n\n[^a]: first\n\n\n    second');
+    assert.match(html, /<p>first<\/p>\n<p>second<a href="#footnote-ref-1"/);
+    assert.doesNotMatch(html, /<pre><code>second/);
   });
 
   it('includes only definitions reachable from document references', () => {
