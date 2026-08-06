@@ -210,8 +210,7 @@ function backrefs(reference: FootnoteReference, prefix: string) {
   const links = [];
   for (let i = 1; i <= reference.count; i++) {
     const suffix = i === 1 ? '' : `-${i}`;
-    const occurrence = i === 1 ? '' : `-${i}`;
-    links.push(`<a href="#${prefix}fnref-${reference.definition.slug}${suffix}" class="footnote-backref" data-footnote-backref aria-label="Back to reference ${reference.number}${occurrence}">↩</a>`);
+    links.push(`<a href="#${prefix}fnref-${reference.definition.slug}${suffix}" class="footnote-backref" data-footnote-backref aria-label="Back to reference ${reference.number}${suffix}">↩</a>`);
   }
   return links.join(' ');
 }
@@ -282,7 +281,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
       renderer(token) {
         const referenceToken = token as FootnoteReferenceToken;
         if (!referenceToken.number || !referenceToken.index) {
-          return referenceToken.raw;
+          return escapeHtmlEntities(referenceToken.raw);
         }
         const reference = referenceToken.state.references.get(referenceToken.label)!;
         const suffix = referenceToken.index === 1 ? '' : `-${referenceToken.index}`;

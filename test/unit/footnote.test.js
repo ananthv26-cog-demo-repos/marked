@@ -120,6 +120,14 @@ describe('footnote extension', () => {
     assert.doesNotMatch(html, /footnote-ref|footnote-backref|data-footnotes/);
   });
 
+  it('escapes unresolved references in manual lexer/parser flows', () => {
+    const marked = new Marked(footnote());
+    const markdown = 'Text[^<svg/onload=alert(1)>].\n\n[^<svg/onload=alert(1)>]: Note';
+    const html = marked.parser(marked.lexer(markdown));
+    assert.match(html, /&lt;svg\/onload=alert\(1\)&gt;/);
+    assert.doesNotMatch(html, /<svg/);
+  });
+
   it('renders the same source identically on repeated parses', () => {
     const marked = withFootnotes();
     const markdown = 'Text[^1] and [^1].\n\n[^1]: Note';
