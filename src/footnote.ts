@@ -110,7 +110,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         }
         continue;
       }
-      if (token.type === 'link') {
+      if (token.type === 'link' || token.type === 'image') {
         if (token.tokens) {
           collectFootnoteRefs(token.tokens as TokensList, stack, refs, definitions, true);
         }

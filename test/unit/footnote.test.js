@@ -96,6 +96,13 @@ describe('Footnotes extension', () => {
     assert.doesNotMatch(html, /<section class="footnotes"/);
   });
 
+  it('keeps refs inside image alt text literal', () => {
+    const html = render('![alt [link](/u) [^a]](/img)\n\n[^a]: note');
+    assert.match(html, /<img src="\/img" alt="alt link \[\^a\]">/);
+    assert.doesNotMatch(html, /<sup><a href="#footnote-/);
+    assert.doesNotMatch(html, /<section class="footnotes"/);
+  });
+
   it('keeps list items tight when definitions appear inside list items', () => {
     const html = render('- item[^a]\n  [^a]: first\n\n      second\n- after');
     assert.match(html, /<li>after<\/li>/);
