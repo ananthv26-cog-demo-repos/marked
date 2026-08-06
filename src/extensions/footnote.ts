@@ -20,11 +20,19 @@ interface FootnoteState {
   references: Map<string, FootnoteReference>;
   order: FootnoteReference[];
   slugs: Set<string>;
+  resolved?: boolean;
 }
 
 interface FootnoteToken extends Tokens.Generic {
   type: 'footnote-end' | 'footnote-definition';
   state: FootnoteState;
+}
+
+interface FootnoteReferenceToken extends Tokens.Generic {
+  state: FootnoteState;
+  label: string;
+  number?: number;
+  index?: number;
 }
 
 export interface FootnoteOptions {
@@ -98,7 +106,8 @@ function definitionTokenizer(this: { lexer: _Lexer }, src: string): FootnoteToke
 
   const state = getState(this.lexer);
   const label = firstLine[1];
-  if (!state.definitions.has(label)) {
+  const isDuplicate = state.definitions.has(label);
+  if (!isDuplicate) {
     const top = this.lexer.state.top;
     let tokens: Token[];
     this.lexer.state.top = true;
@@ -116,12 +125,15 @@ function definitionTokenizer(this: { lexer: _Lexer }, src: string): FootnoteToke
   }
 
   const definition = state.definitions.get(label);
-  return {
+  const token: FootnoteToken = {
     type: 'footnote-definition',
     raw: src.slice(0, consumed),
     state,
-    tokens: definition?.tokens,
   };
+  if (!isDuplicate && definition) {
+    token.tokens = definition.tokens;
+  }
+  return token;
 }
 
 function referenceStart(src: string) {
@@ -153,11 +165,53 @@ function referenceTokenizer(this: { lexer: _Lexer }, src: string): Tokens.Generi
   };
 }
 
+function resolveReferences(tokens: Token[], state: FootnoteState) {
+  for (const token of tokens) {
+    if (token.type === 'footnote-definition' || token.type === 'image') {
+      continue;
+    }
+    if (token.type === 'footnote-reference') {
+      const referenceToken = token as FootnoteReferenceToken;
+      let reference = state.references.get(referenceToken.label);
+      if (!reference) {
+        const definition = state.definitions.get(referenceToken.label);
+        if (!definition) {
+          continue;
+        }
+        reference = {
+          definition,
+          number: state.order.length + 1,
+          count: 0,
+        };
+        state.references.set(referenceToken.label, reference);
+        state.order.push(reference);
+      }
+      referenceToken.number = reference.number;
+      referenceToken.index = ++reference.count;
+      continue;
+    }
+    const genericToken = token as Tokens.Generic;
+    if (genericToken.tokens) {
+      resolveReferences(genericToken.tokens, state);
+    }
+    if (token.type === 'list') {
+      for (const item of token.items) {
+        resolveReferences(item.tokens, state);
+      }
+    } else if (token.type === 'table') {
+      for (const cell of [...token.header, ...token.rows.flat()]) {
+        resolveReferences(cell.tokens, state);
+      }
+    }
+  }
+}
+
 function backrefs(reference: FootnoteReference, prefix: string) {
   const links = [];
   for (let i = 1; i <= reference.count; i++) {
     const suffix = i === 1 ? '' : `-${i}`;
-    links.push(`<a href="#${prefix}fnref-${reference.definition.slug}${suffix}" class="footnote-backref" data-footnote-backref aria-label="Back to reference ${reference.number}">↩</a>`);
+    const occurrence = i === 1 ? '' : `-${i}`;
+    links.push(`<a href="#${prefix}fnref-${reference.definition.slug}${suffix}" class="footnote-backref" data-footnote-backref aria-label="Back to reference ${reference.number}${occurrence}">↩</a>`);
   }
   return links.join(' ');
 }
@@ -209,10 +263,13 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
       level: 'block',
       start: (src) => {
         let index = src.indexOf('[^');
-        while (index !== -1 && (index === 0 || src[index - 1] !== '\n')) {
+        while (index !== -1) {
+          if (index > 0 && src[index - 1] === '\n' && /^\[\^([^\]\s^]+)\]:/.test(src.slice(index))) {
+            return index;
+          }
           index = src.indexOf('[^', index + 2);
         }
-        return index === -1 ? undefined : index;
+        return undefined;
       },
       tokenizer: definitionTokenizer,
       renderer: () => '',
@@ -223,22 +280,13 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
       start: referenceStart,
       tokenizer: referenceTokenizer,
       renderer(token) {
-        const referenceToken = token as Tokens.Generic & { state: FootnoteState, label: string };
-        const reference = referenceToken.state.references.get(referenceToken.label)
-          || (() => {
-            const definition = referenceToken.state.definitions.get(referenceToken.label)!;
-            const created = {
-              definition,
-              number: referenceToken.state.order.length + 1,
-              count: 0,
-            };
-            referenceToken.state.references.set(referenceToken.label, created);
-            referenceToken.state.order.push(created);
-            return created;
-          })();
-        reference.count++;
-        const suffix = reference.count === 1 ? '' : `-${reference.count}`;
-        return `<sup class="footnote-ref"><a href="#${prefix}fn-${reference.definition.slug}" id="${prefix}fnref-${reference.definition.slug}${suffix}" data-footnote-ref>${reference.number}</a></sup>`;
+        const referenceToken = token as FootnoteReferenceToken;
+        if (!referenceToken.number || !referenceToken.index) {
+          return referenceToken.raw;
+        }
+        const reference = referenceToken.state.references.get(referenceToken.label)!;
+        const suffix = referenceToken.index === 1 ? '' : `-${referenceToken.index}`;
+        return `<sup class="footnote-ref"><a href="#${prefix}fn-${reference.definition.slug}" id="${prefix}fnref-${reference.definition.slug}${suffix}" data-footnote-ref>${referenceToken.number}</a></sup>`;
       },
     },
     {
@@ -268,7 +316,14 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
     hooks: {
       processAllTokens(tokens) {
         const state = findState(tokens as Token[]);
-        if (state) {
+        if (state && !state.resolved) {
+          resolveReferences(tokens as Token[], state);
+          for (let i = 0; i < state.order.length; i++) {
+            resolveReferences(state.order[i].definition.tokens, state);
+          }
+          state.resolved = true;
+        }
+        if (state && !(tokens as Token[]).some(token => token.type === 'footnote-end')) {
           (tokens as Token[]).push({
             type: 'footnote-end',
             raw: '',

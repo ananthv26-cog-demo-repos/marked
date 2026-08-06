@@ -22,6 +22,7 @@ describe('footnote extension', () => {
     const html = withFootnotes().parse('[^1] and [^1].\n\n[^1]: Note');
     assert.match(html, /id="fnref-1-2"/);
     assert.strictEqual((html.match(/class="footnote-backref"/g) || []).length, 2);
+    assert.match(html, /aria-label="Back to reference 1-2"/);
   });
 
   it('leaves undefined references as text and omits unreferenced definitions', () => {
@@ -80,6 +81,12 @@ describe('footnote extension', () => {
     assert.doesNotMatch(html, /fn-1-2/);
   });
 
+  it('does not clip a line-start reference that is not a definition', () => {
+    const html = withFootnotes().parse('[^1] text.\n\n[^1]: Note');
+    assert.match(html, /<p><sup class="footnote-ref"><a href="#fn-1"/);
+    assert.match(html, /<\/a><\/sup> text\.<\/p>/);
+  });
+
   it('places backrefs after block content when a definition ends in a list', () => {
     const markdown = 'Text[^1].\n\n[^1]:\n\n    - item';
     const html = withFootnotes().parse(markdown);
@@ -103,8 +110,28 @@ describe('footnote extension', () => {
         }
       },
     });
-    marked.parse('Text[^1].\n\n[^1]: Body');
-    assert.ok(seen.includes('Body'));
+    marked.parse('Text[^1].\n\n[^1]: Body\n[^1]: Duplicate');
+    assert.strictEqual(seen.filter(text => text === 'Body').length, 1);
+  });
+
+  it('does not count or render references inside image alt text', () => {
+    const html = withFootnotes().parse('![alt [^1]](img.png)\n\n[^1]: Note');
+    assert.match(html, /alt="alt \[\^1\]"/);
+    assert.doesNotMatch(html, /footnote-ref|footnote-backref|data-footnotes/);
+  });
+
+  it('renders the same source identically on repeated parses', () => {
+    const marked = withFootnotes();
+    const markdown = 'Text[^1] and [^1].\n\n[^1]: Note';
+    assert.strictEqual(marked.parse(markdown), marked.parse(markdown));
+  });
+
+  it('does not duplicate the section when installing footnotes twice', () => {
+    const marked = new Marked();
+    marked.use(footnote());
+    marked.use(footnote());
+    const html = marked.parse('Text[^1].\n\n[^1]: Note');
+    assert.strictEqual((html.match(/data-footnotes/g) || []).length, 1);
   });
 
   it('supports an id prefix', () => {
