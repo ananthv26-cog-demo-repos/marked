@@ -13,6 +13,8 @@ import {
 import type { MarkedExtension, MarkedOptions } from './MarkedOptions.ts';
 import type { Token, TokensList } from './Tokens.ts';
 import type { MaybePromise } from './Instance.ts';
+export { footnote } from './extensions/footnote.ts';
+export type { FootnoteOptions } from './extensions/footnote.ts';
 
 const markedInstance = new Marked();
 
