@@ -170,6 +170,27 @@ describe('Footnotes extension', () => {
     assert.match(render('A[^a]\n\n[^a]:'), /<li id="footnote-1">\n<p><a href="#footnote-ref-1"/);
   });
 
+  it('supports empty definitions in the middle of a document', () => {
+    const source = 'A[^a]\n\n[^a]:\n\nmore';
+    const marked = new Marked(footnote());
+    const tokens = marked.lexer(source);
+    const definition = tokens.find(token => token.type === 'footnoteDefinition');
+    assert.strictEqual(definition.raw, '[^a]:');
+    assert.strictEqual(marked.parse(source), '<p>A<sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup></p>\n<p>more</p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p><a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n</ol>\n</section>\n');
+  });
+
+  it('lets a bare definition terminate the previous definition', () => {
+    const source = '[^a]\n\n[^a]: first\n[^b]:\n\nmore';
+    const marked = new Marked(footnote());
+    const tokens = marked.lexer(source);
+    assert.strictEqual(tokens.filter(token => token.type === 'footnoteDefinition').length, 2);
+    assert.match(marked.parser(tokens), /<p>more<\/p>/);
+  });
+
+  it('pins the setext-definition interaction', () => {
+    assert.strictEqual(render('para\n[^a]: note\n---'), '<h2>para\n[^a]: note</h2>\n');
+  });
+
   it('includes only definitions reachable from document references', () => {
     const html = render('[^a]\n\n[^a]: A contains [^b]\n\n[^b]: B\n\n[^c]: C');
     assert.match(html, /A contains <sup><a href="#footnote-2"/);

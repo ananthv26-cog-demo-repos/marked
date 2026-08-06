@@ -53,9 +53,9 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
 
   const normalizeLabel = (label: string) => label.toLowerCase().replace(/\s+/g, ' ');
   const labelPattern = '[^\\[\\]\\n]+';
-  const definitionPattern = new RegExp(`^ {0,3}\\[\\^(${labelPattern})\\]:(?=[ \\t]|$)`);
+  const definitionPattern = new RegExp(`^ {0,3}\\[\\^(${labelPattern})\\]:(?=[ \\t]|\\n|$)`);
   const referencePattern = new RegExp(`^\\[\\^(${labelPattern})\\]`);
-  const definitionStartPattern = new RegExp(`\\n {0,3}\\[\\^${labelPattern}\\]:(?=[ \\t]|$)`);
+  const definitionStartPattern = new RegExp(`\\n {0,3}\\[\\^${labelPattern}\\]:(?=[ \\t]|\\n|$)`);
 
   const getState = (tokens: TokensList) => {
     let state = states.get(tokens);
