@@ -116,5 +116,7 @@ export { _Renderer as Renderer } from './Renderer.ts';
 export { _TextRenderer as TextRenderer } from './TextRenderer.ts';
 export { _Hooks as Hooks } from './Hooks.ts';
 export { Marked } from './Instance.ts';
+export { footnote } from './footnote.ts';
+export type { FootnoteOptions } from './footnote.ts';
 export type * from './MarkedOptions.ts';
 export type * from './Tokens.ts';
