@@ -86,6 +86,27 @@ describe('footnote extension', () => {
     assert.match(html, /<ul>\n<li>item<\/li>\n<\/ul>\n<p><a href="#fnref-1" class="footnote-backref"/);
   });
 
+  it('restores list context after lexing a definition body', () => {
+    const markdown = '- [^1]: Note\n  following text\n\nText[^1]';
+    const html = withFootnotes().parse(markdown);
+    assert.match(html, /<ul>\n<li>following text<\/li>\n<\/ul>/);
+    assert.match(html, /<li id="fn-1"><p>Note /);
+  });
+
+  it('walks tokens inside footnote bodies', () => {
+    const seen = [];
+    const marked = new Marked(footnote());
+    marked.use({
+      walkTokens(token) {
+        if (token.type === 'paragraph') {
+          seen.push(token.text);
+        }
+      },
+    });
+    marked.parse('Text[^1].\n\n[^1]: Body');
+    assert.ok(seen.includes('Body'));
+  });
+
   it('supports an id prefix', () => {
     const html = new Marked(footnote({ prefix: 'user-content-' })).parse('Text[^a].\n\n[^a]: Note');
     assert.match(html, /href="#user-content-fn-a" id="user-content-fnref-a"/);

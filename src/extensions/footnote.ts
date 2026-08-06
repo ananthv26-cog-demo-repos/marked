@@ -99,18 +99,28 @@ function definitionTokenizer(this: { lexer: _Lexer }, src: string): FootnoteToke
   const state = getState(this.lexer);
   const label = firstLine[1];
   if (!state.definitions.has(label)) {
+    const top = this.lexer.state.top;
+    let tokens: Token[];
+    this.lexer.state.top = true;
+    try {
+      tokens = this.lexer.blockTokens(lines.join('\n')) as Token[];
+    } finally {
+      this.lexer.state.top = top;
+    }
     const definition: FootnoteDefinition = {
       label,
       slug: makeSlug(label, state.slugs),
-      tokens: this.lexer.blockTokens(lines.join('\n')) as Token[],
+      tokens,
     };
     state.definitions.set(label, definition);
   }
 
+  const definition = state.definitions.get(label);
   return {
     type: 'footnote-definition',
     raw: src.slice(0, consumed),
     state,
+    tokens: definition?.tokens,
   };
 }
 
