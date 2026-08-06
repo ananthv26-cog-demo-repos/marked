@@ -41,10 +41,16 @@ describe('footnote extension', () => {
   it('does not transform escaped references, code spans, or fenced code', () => {
     const markdown = 'Escaped \\[^1] and `[^1]`.\n\n~~~md\n[^1]\n~~~\n\n[^1]: Note';
     const html = withFootnotes().parse(markdown);
-    assert.match(html, /\[\^1\]/);
+    assert.match(html, /Escaped \[\^1\]/);
     assert.match(html, /<code>\[\^1\]<\/code>/);
     assert.match(html, /<pre><code class="language-md">\[\^1\]\n<\/code><\/pre>/);
     assert.doesNotMatch(html, /footnote-ref/);
+  });
+
+  it('finds references at the start of an inline remainder and after escapes', () => {
+    const markdown = 'a[^1] rest.\n\nEscaped \\* then [^1].\n\n[^1]: Note';
+    const html = withFootnotes().parse(markdown);
+    assert.strictEqual((html.match(/class="footnote-ref"/g) || []).length, 2);
   });
 
   it('supports an id prefix', () => {

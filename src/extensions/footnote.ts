@@ -112,12 +112,9 @@ function definitionTokenizer(this: { lexer: _Lexer }, src: string): FootnoteToke
 }
 
 function referenceStart(src: string) {
-  if (src.startsWith('[^')) {
-    return undefined;
-  }
   let index = src.indexOf('[^');
   while (index !== -1) {
-    if (index > 0 && src[index - 1] !== '\\' && !src.slice(0, index).includes('\\')) {
+    if (src[index - 1] !== '\\') {
       return index;
     }
     index = src.indexOf('[^', index + 2);
