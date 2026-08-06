@@ -247,7 +247,7 @@ describe('Footnotes extension', () => {
   it('falls back to literal references for manual lexer-parser usage', () => {
     const marked = new Marked(footnote());
     const tokens = marked.lexer('A[^<img src=x onerror=alert(1)>]\n\n[^<img src=x onerror=alert(1)>]: note');
-    assert.strictEqual(marked.parser(tokens), '<p>A[^&lt;img src=x onerror=alert(1)&gt;]</p>\n');
+    assert.strictEqual(marked.parser(tokens), '<p>A[^&lt;img src=x onerror=alert(1)&gt;]</p>\n<p>note</p>\n');
   });
 
   it('escapes option values in rendered output', () => {

@@ -78,6 +78,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
   ) => {
     for (const token of tokens as Tokens.Generic[]) {
       if (token.type === 'footnoteDefinition') {
+        token.processed = true;
         const key = normalizeLabel(token.label);
         if (!definitions.has(key)) {
           definitions.set(key, token);
@@ -206,8 +207,11 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           }
           return token;
         },
-        renderer() {
-          return '';
+        renderer(token) {
+          if (token.processed) {
+            return '';
+          }
+          return token.tokens ? this.parser.parse(token.tokens) : '';
         },
       },
       {

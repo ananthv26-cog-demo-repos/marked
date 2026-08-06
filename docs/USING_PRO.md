@@ -797,7 +797,7 @@ Footnotes require the block parsing path (`parse`); `parseInline` intentionally 
 | `backRefLabel` | `↩` | Label used by links back to references |
 | `label` | `Footnotes` | Text for the visually hidden section heading |
 
-Definitions that are never referenced are omitted, while unmatched references remain literal text. Because the extension masks footnote-like spans while parsing emphasis, some footnote-free documents can still parse a little differently. The example above produces a superscript reference and a section such as:
+Definitions that are never referenced are omitted, while unmatched references remain literal text. On the manual two-step `lexer()` → `parser()` path, refs remain escaped literals and definition content is rendered in place because aggregation hooks do not run. Because the extension masks footnote-like spans while parsing emphasis, some footnote-free documents can still parse a little differently. The example above produces a superscript reference and a section such as:
 
 ```html
 <section class="footnotes" data-footnotes>
