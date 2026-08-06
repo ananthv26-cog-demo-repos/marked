@@ -36,7 +36,7 @@ function isBlockConstruct(line: string) {
 }
 
 interface FootnoteState {
-  definitions: Map<string, { token: Tokens.Generic }>;
+  definitions: Set<string>;
   sequence: number;
 }
 
@@ -61,7 +61,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
     let state = states.get(tokens);
     if (!state) {
       state = {
-        definitions: new Map(),
+        definitions: new Set(),
         sequence: 0,
       };
       states.set(tokens, state);
@@ -110,6 +110,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         }
         continue;
       }
+      // Keep refs out of links/images: outputLink resets inLink after nested content.
       if (token.type === 'link' || token.type === 'image') {
         if (token.tokens) {
           collectFootnoteRefs(token.tokens as TokensList, stack, refs, definitions, true);
@@ -201,7 +202,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             tokens: definitionTokens,
           };
           if (!state.definitions.has(key)) {
-            state.definitions.set(key, { token });
+            state.definitions.add(key);
           }
           return token;
         },
