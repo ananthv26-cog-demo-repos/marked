@@ -50,6 +50,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
   const backRefLabel = options.backRefLabel ?? '↩';
   const headingLabel = options.label ?? 'Footnotes';
   const states = new WeakMap<TokensList, FootnoteState>();
+  const sequences = new WeakMap<Tokens.Generic, number>();
 
   const normalizeLabel = (label: string) => label.toLowerCase().replace(/\s+/g, ' ');
   const labelPattern = '[^\\[\\]\\n]+';
@@ -91,7 +92,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         continue;
       }
       if (token.type === 'footnoteRef' && !inLink) {
-        const sequence = (token as Tokens.Generic & { sequence?: number }).sequence ?? 0;
+        const sequence = sequences.get(token) ?? 0;
         refs.push({ token, context: stack.at(-1), key: normalizeLabel(token.label), sequence });
       }
       if (token.type === 'list') {
@@ -238,8 +239,8 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             type: 'footnoteRef',
             raw: match[0],
             label: match[1],
-            sequence: state.sequence++,
           };
+          sequences.set(token, state.sequence++);
           return token;
         },
       },
@@ -286,6 +287,9 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
       },
       processAllTokens(tokens) {
         if (this.block === false) {
+          return tokens;
+        }
+        if ((tokens as Tokens.Generic[]).some(token => token.type === 'footnotes')) {
           return tokens;
         }
         const definitions = new Map<string, Tokens.Generic>();

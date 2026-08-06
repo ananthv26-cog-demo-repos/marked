@@ -10,6 +10,14 @@ describe('Footnotes extension', () => {
     assert.strictEqual(html, '<p>Text<sup><a href="#footnote-1" id="footnote-ref-1" data-footnote-ref aria-describedby="footnote-label">1</a></sup>.</p>\n<section class="footnotes" data-footnotes>\n<h2 id="footnote-label" class="sr-only">Footnotes</h2>\n<ol>\n<li id="footnote-1">\n<p>A note.<a href="#footnote-ref-1" data-footnote-backref aria-label="Back to reference 1">↩</a></p>\n</li>\n</ol>\n</section>\n');
   });
 
+  it('does not duplicate the section when registered twice', () => {
+    const source = 'Text[^1].\n\n[^1]: A note.';
+    const single = new Marked(footnote());
+    const duplicate = new Marked();
+    duplicate.use(footnote(), footnote());
+    assert.strictEqual(duplicate.parse(source), single.parse(source));
+  });
+
   it('numbers by first reference, supports repeats, and folds labels', () => {
     const html = render('[^B] [^a] [^B] [^A]\n\n[^a]: A\n[^B]: B');
     assert.match(html, /id="footnote-ref-1"/);
