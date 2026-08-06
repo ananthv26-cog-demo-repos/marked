@@ -57,6 +57,10 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
   const definitionPattern = new RegExp(`^ {0,3}\\[\\^(${labelPattern})\\]:(?=[ \\t]|\\n|$)`);
   const referencePattern = new RegExp(`^\\[\\^(${labelPattern})\\]`);
   const definitionStartPattern = new RegExp(`\\n {0,3}\\[\\^${labelPattern}\\]:(?=[ \\t]|\\n|$)`);
+  const getDefinitionMatch = (src: string) => {
+    const match = definitionPattern.exec(src);
+    return match && !/(^\s|\s$)/.test(match[1]) ? match : undefined;
+  };
 
   const getState = (tokens: TokensList) => {
     let state = states.get(tokens);
@@ -138,7 +142,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           return match.index + 1;
         },
         tokenizer(src) {
-          const match = definitionPattern.exec(src);
+          const match = getDefinitionMatch(src);
           if (!match || /(^\s|\s$)/.test(match[1])) {
             return undefined;
           }
@@ -151,7 +155,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
             const line = lines[lineIndex];
             const isBlank = line.trim() === '';
             const isIndented = /^(?: {4}|\t)/.test(line);
-            const isDefinition = /^ {0,3}\[\^[^\[\]\n]+]:(?=[ \t]|$)/.test(line);
+            const isDefinition = getDefinitionMatch(line) !== undefined;
 
             if (isBlank) {
               let nextIndex = lineIndex + 1;

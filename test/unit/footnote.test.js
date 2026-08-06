@@ -178,6 +178,12 @@ describe('Footnotes extension', () => {
     assert.match(render('A[^a]\n\n[^a]:'), /<li id="footnote-1">\n<p><a href="#footnote-ref-1"/);
   });
 
+  it('keeps invalid definition labels in the preceding note', () => {
+    const html = render('[^a]\n\n[^a]: first\n[^ b]: x');
+    assert.match(html, /<p>first\n\[\^ b\]: x<a href="#footnote-ref-1"/);
+    assert.doesNotMatch(html, /<p>\[\^ b\]: x<\/p>/);
+  });
+
   it('supports empty definitions in the middle of a document', () => {
     const source = 'A[^a]\n\n[^a]:\n\nmore';
     const marked = new Marked(footnote());
