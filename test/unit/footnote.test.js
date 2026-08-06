@@ -50,7 +50,40 @@ describe('footnote extension', () => {
   it('finds references at the start of an inline remainder and after escapes', () => {
     const markdown = 'a[^1] rest.\n\nEscaped \\* then [^1].\n\n[^1]: Note';
     const html = withFootnotes().parse(markdown);
-    assert.strictEqual((html.match(/class="footnote-ref"/g) || []).length, 2);
+    const reference = '<sup class="footnote-ref"><a href="#fn-1" id="fnref-1" data-footnote-ref>1</a></sup>';
+    assert.match(html, new RegExp(`a${reference} rest\\.`));
+    assert.match(html, /Escaped \* then <sup class="footnote-ref"><a href="#fn-1" id="fnref-1-2" data-footnote-ref>1<\/a><\/sup>\./);
+    const breaksHtml = withFootnotes().parse('a[^1] rest.\n\n[^1]: Note', { breaks: true });
+    assert.match(breaksHtml, new RegExp(`a${reference} rest\\.`));
+  });
+
+  it('updates backrefs after later footnote bodies add references', () => {
+    const markdown = 'X[^a] Y[^b].\n\n[^a]: A\n[^b]: B refs [^a].';
+    const html = withFootnotes().parse(markdown);
+    assert.match(html, /id="fnref-a"[^>]*>1/);
+    assert.match(html, /id="fnref-a-2"[^>]*>1/);
+    assert.match(html, /href="#fnref-a" class="footnote-backref"/);
+    assert.match(html, /href="#fnref-a-2" class="footnote-backref"/);
+  });
+
+  it('strips all whitespace after a definition colon', () => {
+    const html = withFootnotes().parse('Text[^1].\n\n[^1]:      Note');
+    assert.match(html, /<li id="fn-1"><p>Note /);
+    assert.doesNotMatch(html, /<pre><code>/);
+  });
+
+  it('keeps the first definition when labels are duplicated', () => {
+    const markdown = 'Text[^1].\n\n[^1]: First\n[^1]: Second';
+    const html = withFootnotes().parse(markdown);
+    assert.match(html, /First/);
+    assert.doesNotMatch(html, /Second/);
+    assert.doesNotMatch(html, /fn-1-2/);
+  });
+
+  it('places backrefs after block content when a definition ends in a list', () => {
+    const markdown = 'Text[^1].\n\n[^1]:\n\n    - item';
+    const html = withFootnotes().parse(markdown);
+    assert.match(html, /<ul>\n<li>item<\/li>\n<\/ul>\n<p><a href="#fnref-1" class="footnote-backref"/);
   });
 
   it('supports an id prefix', () => {

@@ -35,6 +35,7 @@ export interface FootnoteOptions {
 }
 
 // A lexer is created for each parse, so this keeps async and sequential parses isolated.
+// Manual lexer/parser flows bypass processAllTokens, and multiple footnote() packs share state on one instance.
 const states = new WeakMap<_Lexer, FootnoteState>();
 
 function getState(lexer: _Lexer): FootnoteState {
@@ -64,7 +65,7 @@ function makeSlug(label: string, slugs: Set<string>) {
 }
 
 function definitionTokenizer(this: { lexer: _Lexer }, src: string): FootnoteToken | undefined {
-  const firstLine = /^\[\^([^\]\s^]+)\]:[ \t]?(.*)(?:\n|$)/.exec(src);
+  const firstLine = /^\[\^([^\]\s^]+)\]:[ \t]*(.*)(?:\n|$)/.exec(src);
   if (!firstLine) {
     return;
   }
@@ -97,12 +98,14 @@ function definitionTokenizer(this: { lexer: _Lexer }, src: string): FootnoteToke
 
   const state = getState(this.lexer);
   const label = firstLine[1];
-  const definition: FootnoteDefinition = {
-    label,
-    slug: makeSlug(label, state.slugs),
-    tokens: this.lexer.blockTokens(lines.join('\n')) as Token[],
-  };
-  state.definitions.set(label, definition);
+  if (!state.definitions.has(label)) {
+    const definition: FootnoteDefinition = {
+      label,
+      slug: makeSlug(label, state.slugs),
+      tokens: this.lexer.blockTokens(lines.join('\n')) as Token[],
+    };
+    state.definitions.set(label, definition);
+  }
 
   return {
     type: 'footnote-definition',
@@ -123,9 +126,6 @@ function referenceStart(src: string) {
 }
 
 function referenceTokenizer(this: { lexer: _Lexer }, src: string): Tokens.Generic | undefined {
-  if (src.startsWith('\\')) {
-    return;
-  }
   const match = /^\[\^([^\]\s^]+)\]/.exec(src);
   if (!match) {
     return;
@@ -153,11 +153,12 @@ function backrefs(reference: FootnoteReference, prefix: string) {
 }
 
 function appendBackrefs(html: string, links: string) {
-  const end = html.lastIndexOf('</p>');
-  if (end !== -1) {
+  const trailing = html.length - html.trimEnd().length;
+  const end = html.length - trailing - '</p>'.length;
+  if (end >= 0 && html.slice(end, end + '</p>'.length) === '</p>') {
     return `${html.slice(0, end)} ${links}${html.slice(end)}`;
   }
-  return `<p>${html}${links}</p>`;
+  return `${html}<p>${links}</p>`;
 }
 
 function findState(tokens: Token[]): FootnoteState | undefined {
@@ -198,7 +199,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
       level: 'block',
       start: (src) => {
         let index = src.indexOf('[^');
-        while (index !== -1 && index > 0 && src[index - 1] !== '\n') {
+        while (index !== -1 && (index === 0 || src[index - 1] !== '\n')) {
           index = src.indexOf('[^', index + 2);
         }
         return index === -1 ? undefined : index;
@@ -238,10 +239,14 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
           return '';
         }
         let output = '<section class="footnotes" data-footnotes><ol>';
+        const contents = [];
         for (let i = 0; i < footnoteToken.state.order.length; i++) {
           const reference = footnoteToken.state.order[i];
-          const content = this.parser.parse(reference.definition.tokens);
-          output += `<li id="${prefix}fn-${reference.definition.slug}">${appendBackrefs(content, backrefs(reference, prefix))}</li>`;
+          contents.push(this.parser.parse(reference.definition.tokens));
+        }
+        for (let i = 0; i < contents.length; i++) {
+          const reference = footnoteToken.state.order[i];
+          output += `<li id="${prefix}fn-${reference.definition.slug}">${appendBackrefs(contents[i], backrefs(reference, prefix))}</li>`;
         }
         output += '</ol></section>\n';
         return output;
