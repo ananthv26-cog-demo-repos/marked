@@ -64,6 +64,25 @@ All options will overwrite those previously set, except for the following option
 
 Importantly, ensure that the extensions are only added to `marked` once (ie in the global scope of a regular JavaScript or TypeScript module). If they are added in a function that is called repeatedly, or in the JS for an HTML component in a library such as Svelte, your extensions will be added repeatedly, eventually causing a recursion error. If you cannot prevent the code from being run repeatedly, you should create a [Marked instance](/using_advanced#instance) so that your extensions are stored independently from the global instance Marked provides.
 
+### Footnotes
+
+Footnotes are available as an opt-in extension:
+
+```js
+import { marked, footnote } from 'marked';
+
+marked.use(footnote());
+marked.parse('Text[^1].\n\n[^1]: Footnote text');
+```
+
+The optional `prefix` namespaces generated IDs:
+
+```js
+marked.use(footnote({ prefix: 'user-content-' }));
+```
+
+References render as `<sup class="footnote-ref"><a data-footnote-ref>1</a></sup>`, and referenced definitions are collected in a `<section class="footnotes" data-footnotes><ol>...</ol></section>` at the end of the document. Definitions must use GFM-style continuation lines indented by four spaces or a tab; lazy continuation is not supported. A manual `marked.lexer()` plus `marked.parser()` flow bypasses `processAllTokens`, so it does not emit the footnotes section.
+
 ***
 
 <h2>The Marked Pipeline</h2>
