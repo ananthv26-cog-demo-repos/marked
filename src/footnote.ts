@@ -143,7 +143,7 @@ export function footnote(options: FootnoteOptions = {}): MarkedExtension {
         },
         tokenizer(src) {
           const match = getDefinitionMatch(src);
-          if (!match || /(^\s|\s$)/.test(match[1])) {
+          if (!match) {
             return undefined;
           }
 
